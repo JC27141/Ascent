@@ -15,6 +15,8 @@ const STYLE = `
   --line:#46392b; --chalk:#f3ece0; --chalk-dim:#b6a890; --faint:#7d6f5b;
   --rope:#d4673a; --rope-soft:#a44e2c; --deload:#d99a2b; --test:#6699b3; --moss:#9bab63;
 }
+html,body,#root{margin:0;min-height:100%;background:var(--granite);}
+body{overflow-x:hidden;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 .ct-root{font-family:'Spline Sans',system-ui,sans-serif;color:var(--chalk);background:
   radial-gradient(900px 600px at 80% -10%, rgba(212,103,58,.10), transparent 60%),
@@ -444,11 +446,21 @@ function newestAppData(local, remote){
 const exByName = (n) => EX.find((e) => e.n === n);
 const fmt = (s) => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 const today = () => new Date().toISOString().slice(0,10);
+const parseLocalDate = (date) => new Date(`${date}T12:00:00`);
+const ordinal = (day) => {
+  const mod100=day%100;
+  if(mod100>=11 && mod100<=13) return `${day}th`;
+  return `${day}${day%10===1?"st":day%10===2?"nd":day%10===3?"rd":"th"}`;
+};
+const fmtFullDate = (date) => {
+  const d=parseLocalDate(date);
+  return `${d.toLocaleDateString(undefined,{weekday:"long"})}, ${d.toLocaleDateString(undefined,{month:"long"})} ${ordinal(d.getDate())}`;
+};
 const PHASE_COLOR = { deload:"var(--deload)", test:"var(--test)", normal:"var(--rope)" };
 const CAT_ICON = { Shoulder:Wind, "Pull-ups":Dumbbell, Core:Activity, "Foot/Ankle":Footprints, Fingers:Hand, Technique:Mountain, Antagonist:Dumbbell };
 const logKey = (week, sid) => `${week}-${sid}`;
 const addDays = (date, days) => {
-  const d=new Date(`${date}T12:00:00`);
+  const d=parseLocalDate(date);
   d.setDate(d.getDate()+days);
   return d.toISOString().slice(0,10);
 };
@@ -854,7 +866,7 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
     closeBlockForm();
   };
   const monthLabel=new Date(`${viewMonth}T12:00:00`).toLocaleDateString(undefined,{month:"long",year:"numeric"});
-  const fmtDay=(date)=>new Date(`${date}T12:00:00`).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+  const fmtDay=(date)=>parseLocalDate(date).toLocaleDateString(undefined,{month:"short",day:"numeric"});
 
   return (
     <div className="stagger">
@@ -911,8 +923,8 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
 
       <div className="card" style={{padding:14,marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginBottom:10}}>
-          <div className="disp" style={{fontSize:16,color:"var(--rope)"}}>{fmtDay(selected)}</div>
-          <div className="mono" style={{fontSize:11,color:"var(--faint)"}}>{selected}</div>
+          <div className="disp" style={{fontSize:16,color:"var(--rope)"}}>{fmtFullDate(selected)}</div>
+          <div className="mono" style={{fontSize:11,color:"var(--faint)"}}>Agenda</div>
         </div>
 
         {selectedBlocks.length>0 && (
@@ -928,7 +940,7 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
                       <button className="btn btn-ghost" style={{padding:"4px 7px"}} onClick={()=>deleteBlock(index)}><Trash2 size={13}/></button>
                     </div>
                   </div>
-                  <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:3}}>{block.startDate} to {block.endDate}</div>
+                  <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:3}}>{fmtFullDate(block.startDate)} to {fmtFullDate(block.endDate)}</div>
                   {block.notes && <div style={{fontSize:12,color:"var(--chalk-dim)",marginTop:6}}>{block.notes}</div>}
                 </div>
               );
@@ -969,7 +981,7 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
                   <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
                     <span className="pill" style={{background:"var(--surface2)",color:effort.logged?"var(--moss)":"var(--chalk-dim)"}}>{effort.logged?"Logged":"Est"} effort {Math.round(effort.value)}</span>
                     {stats.count>0 && <span className="pill" style={{background:"var(--surface2)",color:"var(--test)"}}>Projecting {stats.count} · max V{stats.hardest}</span>}
-                    {i.shifted && <span className="pill" style={{background:"var(--surface2)",color:"var(--rope)"}}>Shifted from {i.planDate}</span>}
+                    {i.shifted && <span className="pill" style={{background:"var(--surface2)",color:"var(--rope)"}}>Shifted from {fmtFullDate(i.planDate)}</span>}
                   </div>
                 </div>
                 <button className="btn btn-rope" style={{padding:"8px 11px",display:"flex",alignItems:"center",gap:5}} onClick={()=>onOpenSession(i)}>{i.log?"Edit":"Start"}</button>
@@ -998,7 +1010,7 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
             <div className="disp" style={{fontSize:13,color:"var(--rope)",marginBottom:7}}>Upcoming open workouts</div>
             {upcomingOpen.map(i=>(
               <button key={i.key} onClick={()=>setSelected(i.date)} style={{width:"100%",background:"none",border:"none",padding:"5px 0",display:"flex",justifyContent:"space-between",cursor:"pointer",color:"var(--chalk-dim)",fontSize:12}}>
-                <span>{`W${i.week} ${sessionTitle(i.session)}`}</span><span className="mono">{i.date}</span>
+                <span>{`W${i.week} ${sessionTitle(i.session)}`}</span><span className="mono">{fmtFullDate(i.date)}</span>
               </button>
             ))}
           </div>
@@ -1298,9 +1310,9 @@ export default function App(){
                 {schedState.due.length>0 ? (
                   <>Due now: {schedState.due.map(i=>`W${i.week} ${sessionTitle(i.session)}`).join(", ")}.</>
                 ) : schedState.overdue.length>0 ? (
-                  <>Overdue: {schedState.overdue.slice(0,2).map(i=>`W${i.week} ${sessionTitle(i.session)} (${i.date})`).join(", ")}.</>
+                  <>Overdue: {schedState.overdue.slice(0,2).map(i=>`W${i.week} ${sessionTitle(i.session)} (${fmtFullDate(i.date)})`).join(", ")}.</>
                 ) : schedState.upcoming ? (
-                  <>Next up: W{schedState.upcoming.week} {sessionTitle(schedState.upcoming.session)} on {schedState.upcoming.date}.</>
+                  <>Next up: W{schedState.upcoming.week} {sessionTitle(schedState.upcoming.session)} on {fmtFullDate(schedState.upcoming.date)}.</>
                 ) : <>All scheduled sessions are logged.</>}
               </div>
               {travelToday && (
@@ -1398,7 +1410,7 @@ export default function App(){
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                     <div style={{flex:1}}>
                       <div className="disp" style={{fontSize:13,color:"var(--faint)",letterSpacing:".04em",textTransform:"uppercase"}}>{s.day}</div>
-                      <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:2}}>{sDate}</div>
+                      <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:2}}>{fmtFullDate(sDate)}</div>
                       <div style={{fontSize:15,marginTop:3,lineHeight:1.4}}>{s.focus}</div>
                     </div>
                     {log ? (
