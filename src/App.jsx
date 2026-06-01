@@ -1656,6 +1656,13 @@ export default function App(){
     applyAppData(data);
     setLoaded(true);
   },[]);
+  // Show completion modal on load if plan is already complete (e.g. after data injection or returning to a finished plan)
+  useEffect(()=>{
+    if(!loaded) return;
+    if(Object.keys(logs).length>0 && isPlanComplete(plan.weeks,logs)){
+      setCompletionModal("celebration");
+    }
+  },[loaded]);
   useEffect(()=>{
     if(!isCloudConfigured){
       setAuthReady(true);
