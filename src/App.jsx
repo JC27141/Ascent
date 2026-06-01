@@ -1017,7 +1017,7 @@ function Timer({ initial=60 }){
 }
 
 /* ============================ RUNNER ============================ */
-function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
+function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existingLog }){
   const sessionRoutines=session.routines||[];
   const steps=[];
   steps.push({kind:"warmup"});
@@ -1034,6 +1034,7 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
   const [volume,setVolume]=useState(existingLog?.volumeByGrade || {});
   const [attempts,setAttempts]=useState(existingLog?.attemptsByGrade || {});
   const [d,setD]=useState(null);
+  const [confirmClear,setConfirmClear]=useState(false);
   const step=steps[i];
   const last=i===steps.length-1;
   const toggleR=(r)=>setRd(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
@@ -1209,6 +1210,28 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
               )}
               <textarea className="tinput" rows={3} placeholder="Notes — a tweak, a breakthrough, how feet felt…" value={notes} onChange={e=>setNotes(e.target.value)} style={{marginBottom:16}}/>
               <button className="btn btn-rope" style={{width:"100%",padding:14,fontSize:16}} onClick={save}>{editing?"Update session log":"Save session"}</button>
+              {editing && onDelete && (
+                <div style={{marginTop:18,paddingTop:16,borderTop:"1px solid var(--line)"}}>
+                  {!confirmClear ? (
+                    <button className="btn btn-ghost" style={{width:"100%",padding:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:"var(--deload)",borderColor:"var(--line)"}}
+                      onClick={()=>setConfirmClear(true)}>
+                      <Trash2 size={15}/>Clear this session's progress
+                    </button>
+                  ) : (
+                    <div className="card fadein" style={{padding:14,borderColor:"var(--deload)"}}>
+                      <div style={{fontSize:14,color:"var(--chalk-dim)",lineHeight:1.5,marginBottom:12}}>
+                        This permanently deletes the log for {session.day}{existingLog?.date?` (${fmtFullDate(existingLog.date)})`:""} — status, effort, sends and notes. This can't be undone.
+                      </div>
+                      <div style={{display:"flex",gap:8}}>
+                        <button className="btn btn-ghost" style={{flex:1,padding:11}} onClick={()=>setConfirmClear(false)}>Keep it</button>
+                        <button className="btn" style={{flex:1,padding:11,background:"var(--deload)",color:"#1a120c",border:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={onDelete}>
+                          <Trash2 size={15}/>Delete log
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1996,6 +2019,14 @@ export default function App(){
       setTimeout(()=>setCompletionModal("celebration"),400);
     }
   };
+  const deleteLog=(wk,sid)=>{
+    const key=logKey(wk,sid);
+    if(!logs[key]) { setRunner(null); return; }
+    const nextLogs={...logs};
+    delete nextLogs[key];
+    setLogs(nextLogs);
+    setRunner(null);
+  };
   const archiveAndStartNewCycle=(templateId,startDate)=>{
     const newData=archiveActiveCycle(currentAppData(),templateId,startDate);
     applyAppData(newData);
@@ -2061,7 +2092,8 @@ export default function App(){
       {runner && <Runner week={runner.week} session={runner.session}
         spacingWarn={spacingWarn && runner.session.id!=="support"}
         existingLog={logs[logKey(runner.week,runner.session.id)]}
-        onClose={()=>setRunner(null)} onSave={d=>saveLog(runner.week,runner.session.id,d)}/>}
+        onClose={()=>setRunner(null)} onSave={d=>saveLog(runner.week,runner.session.id,d)}
+        onDelete={()=>deleteLog(runner.week,runner.session.id)}/>}
 
       <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 100px"}}>
         {/* header */}
