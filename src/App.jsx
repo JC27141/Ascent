@@ -389,6 +389,7 @@ const DEFAULT_SCHEDULE = {
   preferredSessionDays: { climb1:1, climb2:3, climb3:5, support:6 },
   travelBlocks: [],
   sessionOverrides: {},
+  lastRescheduleUndo: null,
 };
 const DEFAULT_SETTINGS = { };
 
@@ -598,6 +599,7 @@ function normalizeLog(log){
   if(!log || typeof log!=="object") return log;
   return {
     ...log,
+    skipAction: log.status==="skip" ? (log.skipAction || "reschedule") : undefined,
     volumeByGrade: log.volumeByGrade && typeof log.volumeByGrade==="object" ? log.volumeByGrade : {},
     attemptsByGrade: log.attemptsByGrade && typeof log.attemptsByGrade==="object" ? log.attemptsByGrade : {},
   };
@@ -633,6 +635,7 @@ function normalizeAppData(raw){
         },
         travelBlocks: Array.isArray(ac.schedule?.travelBlocks) ? ac.schedule.travelBlocks : [],
         sessionOverrides: (ac.schedule?.sessionOverrides && typeof ac.schedule.sessionOverrides==="object") ? ac.schedule.sessionOverrides : {},
+        lastRescheduleUndo: ac.schedule?.lastRescheduleUndo || null,
       },
       startedAt: ac.startedAt || base.activeCycle.startedAt,
       completedAt: ac.completedAt || null,
@@ -726,10 +729,11 @@ function scheduleItems(plan, schedule, logs){
     return { key, week:w.week, phase:w.phase, type:w.type, session:s, date, planDate, shifted:date!==planDate, log:logs[key], travel:activeTravelBlock(schedule,date) };
   })).sort((a,b)=>a.date.localeCompare(b.date));
 }
+const isOpenLog = (log) => !log || (log.status==="skip" && log.skipAction!=="drop");
 function currentScheduleState(plan, schedule, logs){
   const items=scheduleItems(plan,schedule,logs);
   const t=today();
-  const open=items.filter(i=>!i.log || i.log.status==="skip");
+  const open=items.filter(i=>isOpenLog(i.log));
   const overdue=open.filter(i=>i.date<t);
   const due=open.filter(i=>i.date===t);
   const upcoming=open.find(i=>i.date>=t) || null;
@@ -765,10 +769,91 @@ function itemEffort(item){
   const logged=logEffort(item.log,item.session);
   return { value: logged ?? plannedEffort(item), logged: logged!=null };
 }
+function workoutSurfaceStyle(item){
+  const effort=Math.max(0,itemEffort(item).value||0);
+  const pct=Math.min(1, effort/32);
+  const isSupport=item.session?.id==="support";
+  const rgb=isSupport ? "102,153,179" : "212,103,58";
+  const alpha=(.045 + pct*.14).toFixed(3);
+  const edgeAlpha=(.08 + pct*.14).toFixed(3);
+  return {
+    background:`linear-gradient(135deg, rgba(${rgb},${alpha}), rgba(51,42,31,.76) 48%, rgba(25,21,15,.97))`,
+    boxShadow:`inset 0 1px 0 rgba(${rgb},${edgeAlpha})`,
+  };
+}
 function attemptStats(log){
   const entries=Object.entries(log?.attemptsByGrade||{}).map(([g,n])=>[+g,+n||0]).filter(([,n])=>n>0);
   if(!entries.length) return { count:0, hardest:null };
   return { count:entries.reduce((sum,[,n])=>sum+n,0), hardest:Math.max(...entries.map(([g])=>g)) };
+}
+function weeklyLogStats(logs, planLen){
+  const weeks=Array.from({length:planLen},(_,i)=>({
+    week:i+1, completed:0, sends:0, attempts:0, pain:0, rpeTotal:0, rpeCount:0,
+    volume:0, effort:0, hardestSend:null, hardestAttempt:null, sendsByGrade:{}, attemptsByGrade:{}
+  }));
+  Object.entries(logs||{}).forEach(([key,log])=>{
+    const week=+(key.split("-")[0]);
+    const row=weeks[week-1];
+    if(!row || !log || log.status==="skip") return;
+    if(log.status==="Y" || log.status==="partial") row.completed+=1;
+    if(log.pain) row.pain+=1;
+    const rpe=+log.rpe;
+    if(rpe){ row.rpeTotal+=rpe; row.rpeCount+=1; }
+    Object.entries(log.volumeByGrade||{}).forEach(([grade,count])=>{
+      const g=+grade, n=+count||0;
+      if(!n) return;
+      row.sends+=n;
+      row.sendsByGrade[g]=(row.sendsByGrade[g]||0)+n;
+      row.hardestSend=row.hardestSend==null ? g : Math.max(row.hardestSend,g);
+    });
+    Object.entries(log.attemptsByGrade||{}).forEach(([grade,count])=>{
+      const g=+grade, n=+count||0;
+      if(!n) return;
+      row.attempts+=n;
+      row.attemptsByGrade[g]=(row.attemptsByGrade[g]||0)+n;
+      row.hardestAttempt=row.hardestAttempt==null ? g : Math.max(row.hardestAttempt,g);
+    });
+    row.volume+=volumeScore(log.volumeByGrade);
+    row.effort+=logEffort(log,{ id:key.includes("support") ? "support" : "climb" }) || 0;
+  });
+  return weeks.map(w=>({
+    ...w,
+    avgRpe:w.rpeCount ? w.rpeTotal/w.rpeCount : null,
+    effort:Math.round(w.effort),
+  }));
+}
+function latestMetricValue(metrics, key){
+  return [...(metrics||[])].reverse().find(m=>m?.[key]!=null && m[key]!=="")?.[key] ?? null;
+}
+function metricDelta(metrics, key){
+  const pts=(metrics||[]).filter(m=>m?.[key]!=null && m[key]!=="");
+  if(pts.length<2) return null;
+  return { from:pts[0], to:pts.at(-1), value:+pts.at(-1)[key]-(+pts[0][key]) };
+}
+function buildMetricInsights(metrics, weeklyStats){
+  const insights=[];
+  const active=weeklyStats.filter(w=>w.completed || w.volume || w.effort || w.pain);
+  const last=active.at(-1), prev=active.at(-2);
+  if(last && prev && prev.effort>0 && last.effort>prev.effort*1.35){
+    insights.push({ tone:"warn", text:`Week ${last.week} load jumped ${Math.round((last.effort/prev.effort-1)*100)}%. Keep the next session crisp or go easier if fingers feel flat.` });
+  }
+  if(last?.pain && (last.avgRpe>=7 || (prev && last.effort>prev.effort))){
+    insights.push({ tone:"warn", text:`Pain showed up in week ${last.week} alongside meaningful stress. Treat that as a recovery signal, not a toughness test.` });
+  }
+  const flashDelta=metricDelta(metrics,"flash");
+  const projectDelta=metricDelta(metrics,"project");
+  const recentPain=active.slice(-2).some(w=>w.pain>0) || (metrics||[]).slice(-2).some(m=>m.pain);
+  if((flashDelta?.value>0 || projectDelta?.value>0) && !recentPain){
+    insights.push({ tone:"good", text:"Grade markers are moving without recent pain flags. That is the cleanest kind of progress." });
+  }
+  const pullDelta=metricDelta(metrics,"pullups");
+  if(pullDelta && pullDelta.value<=0 && (flashDelta?.value>0 || projectDelta?.value>0)){
+    insights.push({ tone:"good", text:"Climbing grades improved even though pull-ups did not. Movement efficiency is doing real work here." });
+  }
+  if(!insights.length){
+    insights.push({ tone:"note", text:"Keep logging simple weekly checkpoints. The useful pattern is usually consistency plus pain-free volume, not one heroic number." });
+  }
+  return insights.slice(0,3);
 }
 function nextUnblockedDates(schedule, fromDate, count=3){
   const out=[];
@@ -778,6 +863,90 @@ function nextUnblockedDates(schedule, fromDate, count=3){
     if(!activeTravelBlock(schedule,cursor)) out.push(cursor);
   }
   return out;
+}
+const isOpenScheduleItem = (item) => isOpenLog(item.log);
+const isClimbSession = (item) => item.session?.id?.startsWith("climb");
+function planOrderItems(plan, schedule, logs){
+  return plan.weeks.flatMap(w=>w.sessions.map(s=>{
+    const key=logKey(w.week,s.id);
+    const date=scheduledDate(schedule,w.week,s.id);
+    const planDate=plannedDate(schedule,w.week,s.id);
+    return { key, week:w.week, phase:w.phase, type:w.type, session:s, date, planDate, shifted:date!==planDate, log:logs[key], travel:activeTravelBlock(schedule,date) };
+  }));
+}
+function wouldMakeThreeClimbs(date, climbDates){
+  if(climbDates.has(date)) return false;
+  let start=date, end=date;
+  while(climbDates.has(addDays(start,-1))) start=addDays(start,-1);
+  while(climbDates.has(addDays(end,1))) end=addDays(end,1);
+  return daysBetween(start,end)+1>2;
+}
+function nextValidScheduleDate(schedule, fromDate, item, occupiedDates, climbDates, forceMove=false){
+  let cursor=forceMove ? addDays(fromDate,1) : fromDate;
+  for(let i=0; i<180; i++){
+    const blocked=activeTravelBlock(schedule,cursor);
+    const occupied=occupiedDates.has(cursor);
+    const tooManyClimbs=isClimbSession(item) && wouldMakeThreeClimbs(cursor,climbDates);
+    if(!blocked && !occupied && !tooManyClimbs) return cursor;
+    cursor=addDays(cursor,1);
+  }
+  return cursor;
+}
+function buildRescheduleCascade(plan, schedule, logs, startKey, reason="Reschedule"){
+  const items=planOrderItems(plan,schedule,logs);
+  const startIndex=items.findIndex(i=>i.key===startKey);
+  if(startIndex<0) return null;
+  const startItem=items[startIndex];
+  const occupiedDates=new Set();
+  const climbDates=new Set();
+  items.forEach((item,index)=>{
+    if(index<startIndex || !isOpenScheduleItem(item)){
+      occupiedDates.add(item.date);
+      if(isClimbSession(item)) climbDates.add(item.date);
+    }
+  });
+  const moved=[];
+  for(let index=startIndex; index<items.length; index++){
+    const item=items[index];
+    if(!isOpenScheduleItem(item)) continue;
+    const date=nextValidScheduleDate(schedule,item.date,item,occupiedDates,climbDates,index===startIndex);
+    occupiedDates.add(date);
+    if(isClimbSession(item)) climbDates.add(date);
+    if(date!==item.date){
+      moved.push({ key:item.key, week:item.week, session:item.session, fromDate:item.date, toDate:date, planDate:item.planDate });
+    }
+  }
+  if(!moved.length) return null;
+  const currentOverrides=schedule.sessionOverrides||{};
+  const changes=moved.map(m=>({ key:m.key, previousDate:currentOverrides[m.key] || null, nextDate:m.toDate, planDate:m.planDate }));
+  return { reason, startKey, startItem, moved, changes };
+}
+function applyCascadeToSchedule(schedule, cascade){
+  if(!cascade?.changes?.length) return schedule;
+  const overrides={...(schedule.sessionOverrides||{})};
+  cascade.changes.forEach(change=>{
+    if(change.nextDate && change.nextDate!==change.planDate) overrides[change.key]=change.nextDate;
+    else delete overrides[change.key];
+  });
+  return {
+    ...schedule,
+    sessionOverrides:overrides,
+    lastRescheduleUndo:{
+      createdAt:nowIso(),
+      reason:cascade.reason || "Reschedule",
+      changes:cascade.changes.map(({key,previousDate})=>({key,previousDate:previousDate || null})),
+    },
+  };
+}
+function undoLastReschedule(schedule){
+  const undo=schedule.lastRescheduleUndo;
+  if(!undo?.changes?.length) return schedule;
+  const overrides={...(schedule.sessionOverrides||{})};
+  undo.changes.forEach(change=>{
+    if(change.previousDate) overrides[change.key]=change.previousDate;
+    else delete overrides[change.key];
+  });
+  return { ...schedule, sessionOverrides:overrides, lastRescheduleUndo:null };
 }
 
 function lastClimbDate(logs){
@@ -805,6 +974,14 @@ function weekRoutineDone(wk, weekNum, logs){
     if(l&&l.routinesDone) (s.routines||[]).forEach(r=>{ if(l.routinesDone.includes(r)) d[r]=(d[r]||0)+1; });
   });
   return d;
+}
+
+function loggedSessionItems(plan, logs){
+  return plan.weeks.flatMap(w=>w.sessions.map(s=>{
+    const key=logKey(w.week,s.id);
+    const log=logs[key];
+    return log ? { key, week:w.week, session:s, log } : null;
+  }).filter(Boolean)).sort((a,b)=>(b.log.date||"").localeCompare(a.log.date||"") || b.week-a.week);
 }
 
 /* ============================ TIMER ============================ */
@@ -847,7 +1024,8 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
   if(session.id!=="support") steps.push({kind:"climb"});
   sessionRoutines.forEach(r=>steps.push({kind:"routine",rkey:r}));
   steps.push({kind:"log"});
-  const [i,setI]=useState(0);
+  const editing=!!existingLog;
+  const [i,setI]=useState(existingLog ? steps.length-1 : 0);
   const [status,setStatus]=useState(existingLog?.status || "Y");
   const [rpe,setRpe]=useState(existingLog?.rpe || 6);
   const [pain,setPain]=useState(!!existingLog?.pain);
@@ -860,7 +1038,7 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
   const last=i===steps.length-1;
   const toggleR=(r)=>setRd(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
 
-  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:today(),volumeByGrade:volume,attemptsByGrade:attempts}); };
+  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:existingLog?.date || today(),amendedAt:existingLog?nowIso():existingLog?.amendedAt,volumeByGrade:volume,attemptsByGrade:attempts}); };
   const bumpVolume=(g,delta)=>setVolume(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
   const bumpAttempts=(g,delta)=>setAttempts(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
 
@@ -947,7 +1125,12 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
           );})()}
           {step.kind==="log" && (
             <div>
-              <h2 className="disp" style={{fontSize:26,margin:"0 0 14px"}}>Log it</h2>
+              <h2 className="disp" style={{fontSize:26,margin:"0 0 14px"}}>{editing?"Amend log":"Log it"}</h2>
+              {editing && (
+                <div className="card" style={{padding:12,marginBottom:16,background:"var(--granite)",fontSize:13,color:"var(--chalk-dim)",lineHeight:1.45}}>
+                  Updating this keeps the original session date{existingLog?.date?` (${fmtFullDate(existingLog.date)})`:""} and refreshes the saved details.
+                </div>
+              )}
               <div style={{marginBottom:16}}>
                 <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0,marginBottom:8}}>Done?</div>
                 <div style={{display:"flex",gap:8}}>
@@ -1025,7 +1208,7 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
                 </div>
               )}
               <textarea className="tinput" rows={3} placeholder="Notes — a tweak, a breakthrough, how feet felt…" value={notes} onChange={e=>setNotes(e.target.value)} style={{marginBottom:16}}/>
-              <button className="btn btn-rope" style={{width:"100%",padding:14,fontSize:16}} onClick={save}>Save session</button>
+              <button className="btn btn-rope" style={{width:"100%",padding:14,fontSize:16}} onClick={save}>{editing?"Update session log":"Save session"}</button>
             </div>
           )}
         </div>
@@ -1061,20 +1244,26 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
   const maxEffort=Math.max(1,...Object.values(monthEffortByDate));
   const selectedItems=items.filter(i=>i.date===selected);
   const selectedBlocks=travelBlocksOnDate(schedule,selected);
-  const upcomingOpen=items.filter(i=>i.date>=selected && (!i.log || i.log.status==="skip")).slice(0,3);
+  const upcomingOpen=items.filter(i=>i.date>=selected && isOpenLog(i.log)).slice(0,3);
   const first=new Date(`${viewMonth}T12:00:00`);
   const gridStart=addDays(viewMonth,-first.getDay());
   const days=Array.from({length:42},(_,i)=>addDays(gridStart,i));
 
   const shiftSession=(key,date)=>{
-    setSchedule(s=>({...s,sessionOverrides:{...(s.sessionOverrides||{}),[key]:date}}));
+    setSchedule(s=>({...s,sessionOverrides:{...(s.sessionOverrides||{}),[key]:date},lastRescheduleUndo:null}));
   };
   const resetSession=(key)=>{
     setSchedule(s=>{
       const next={...(s.sessionOverrides||{})};
       delete next[key];
-      return {...s,sessionOverrides:next};
+      return {...s,sessionOverrides:next,lastRescheduleUndo:null};
     });
+  };
+  const applyCascade=(cascade)=>{
+    setSchedule(s=>applyCascadeToSchedule(s,cascade));
+  };
+  const undoCascade=()=>{
+    setSchedule(s=>undoLastReschedule(s));
   };
   const editBlock=(block,index)=>{
     setEditingBlock(index);
@@ -1099,12 +1288,12 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
       const blocks=[...(s.travelBlocks||[])];
       if(editingBlock==null) blocks.push(block);
       else blocks[editingBlock]=block;
-      return {...s,travelBlocks:blocks};
+      return {...s,travelBlocks:blocks,lastRescheduleUndo:null};
     });
     closeBlockForm();
   };
   const deleteBlock=(index)=>{
-    setSchedule(s=>({...s,travelBlocks:(s.travelBlocks||[]).filter((_,i)=>i!==index)}));
+    setSchedule(s=>({...s,travelBlocks:(s.travelBlocks||[]).filter((_,i)=>i!==index),lastRescheduleUndo:null}));
     closeBlockForm();
   };
   const monthLabel=new Date(`${viewMonth}T12:00:00`).toLocaleDateString(undefined,{month:"long",year:"numeric"});
@@ -1133,7 +1322,7 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
           {days.map(date=>{
             const dayItems=items.filter(i=>i.date===date);
             const blocks=travelBlocksOnDate(schedule,date);
-            const conflicts=dayItems.some(i=>i.travel && (!i.log || i.log.status==="skip"));
+            const conflicts=dayItems.some(i=>i.travel && isOpenLog(i.log));
             const attempts=dayItems.reduce((sum,i)=>sum+attemptStats(i.log).count,0);
             const effort=monthEffortByDate[date]||0;
             const effortPct=Math.min(1,effort/maxEffort);
@@ -1168,6 +1357,15 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
           <div className="disp" style={{fontSize:16,color:"var(--rope)"}}>{fmtFullDate(selected)}</div>
           <div className="mono" style={{fontSize:11,color:"var(--faint)"}}>Agenda</div>
         </div>
+        {schedule.lastRescheduleUndo?.changes?.length>0 && (
+          <div style={{border:"1px solid var(--rope-soft)",borderRadius:10,padding:10,background:"var(--granite)",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+            <div>
+              <div className="disp" style={{fontSize:13,color:"var(--rope)"}}>{schedule.lastRescheduleUndo.reason || "Reschedule"} applied</div>
+              <div style={{fontSize:12,color:"var(--chalk-dim)",marginTop:2}}>{schedule.lastRescheduleUndo.changes.length} workout{schedule.lastRescheduleUndo.changes.length===1?"":"s"} moved.</div>
+            </div>
+            <button className="btn btn-ghost" style={{padding:"7px 10px",fontSize:12,whiteSpace:"nowrap"}} onClick={undoCascade}>Undo reschedule</button>
+          </div>
+        )}
 
         {selectedBlocks.length>0 && (
           <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
@@ -1213,9 +1411,11 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
           const effort=itemEffort(i);
           const stats=attemptStats(i.log);
           const candidates=nextUnblockedDates(schedule,i.date,3);
-          const open=!i.log || i.log.status==="skip";
+          const open=isOpenLog(i.log);
+          const cascade=i.travel && open ? buildRescheduleCascade(plan,schedule,logs,i.key,`${i.travel.label||"Blocker"} reschedule`) : null;
+          const surface=workoutSurfaceStyle(i);
           return (
-            <div key={i.key} style={{borderTop:"1px solid var(--line)",padding:"12px 0"}}>
+            <div key={i.key} style={{...surface,border:`1px solid ${i.travel&&open?"var(--deload)":"var(--line)"}`,borderRadius:10,padding:12,marginTop:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                 <div style={{flex:1}}>
                   <div className="disp" style={{fontSize:14}}>{`W${i.week} ${sessionTitle(i.session)}`}</div>
@@ -1230,7 +1430,15 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
               </div>
               {i.travel && open && (
                 <div style={{marginTop:10,border:"1px solid var(--deload)",borderRadius:10,padding:10,background:"var(--granite)"}}>
-                  <div style={{fontSize:12,color:"var(--deload)",marginBottom:8}}>{i.travel.label||"Blocker"} overlaps this workout. Shift it manually when useful.</div>
+                  <div style={{fontSize:12,color:"var(--deload)",marginBottom:8}}>{i.travel.label||"Blocker"} overlaps this workout. Cascade it forward or fine-tune manually.</div>
+                  {cascade && (
+                    <div style={{border:"1px solid var(--line)",borderRadius:9,padding:9,marginBottom:8,background:"var(--surface)"}}>
+                      <div style={{fontSize:12,color:"var(--chalk-dim)",lineHeight:1.4,marginBottom:7}}>
+                        Move {cascade.moved.length} workout{cascade.moved.length===1?"":"s"}: {cascade.moved.slice(0,3).map(m=>`W${m.week} ${sessionTitle(m.session)} to ${fmtDay(m.toDate)}`).join(", ")}{cascade.moved.length>3?"...":""}
+                      </div>
+                      <button className="btn btn-rope" style={{padding:"7px 10px",fontSize:12}} onClick={()=>applyCascade(cascade)}>Apply cascade</button>
+                    </div>
+                  )}
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {candidates.map(d=>(
                       <button key={d} className="btn btn-ghost" style={{padding:"6px 9px",display:"flex",alignItems:"center",gap:5,fontSize:12}} onClick={()=>shiftSession(i.key,d)}><MoveRight size={13}/>{fmtDay(d)}</button>
@@ -1746,11 +1954,28 @@ export default function App(){
   const combinedSends=addSendMaps(sends,sendsFromLogs(logs));
 
   const saveLog=(wk,sid,data)=>{
-    const updatedLog=normalizeLog(data);
-    const updatedLogs={ ...logs, [logKey(wk,sid)]:updatedLog };
-    setLogs(updatedLogs);
+    const key=logKey(wk,sid);
+    const wasSkipped=logs[key]?.status==="skip";
+    let shouldReschedule=false;
+    let logData=data;
+    if(data.status==="skip"){
+      if(!wasSkipped){
+        shouldReschedule=typeof window !== "undefined" && window.confirm("Treat this skipped workout as an unplanned rest and reschedule it? Choose Cancel to drop it from the plan.");
+        logData={...data,skipAction:shouldReschedule?"reschedule":"drop"};
+      } else {
+        logData={...data,skipAction:logs[key]?.skipAction || "reschedule"};
+      }
+    }
+    const nextLogs={...logs,[key]:normalizeLog(logData)};
+    setLogs(nextLogs);
+    if(shouldReschedule){
+      setSchedule(s=>{
+        const cascade=buildRescheduleCascade(plan,s,nextLogs,key,"Unplanned rest reschedule");
+        return cascade ? applyCascadeToSchedule(s,cascade) : s;
+      });
+    }
     setRunner(null);
-    if(!completionModal && isPlanComplete(plan.weeks,updatedLogs)){
+    if(!completionModal && isPlanComplete(plan.weeks,nextLogs)){
       setTimeout(()=>setCompletionModal("celebration"),400);
     }
   };
@@ -1990,8 +2215,10 @@ export default function App(){
               const log=logs[`${curWeek}-${s.id}`];
               const sDate=scheduledDate(schedule,curWeek,s.id);
               const sTravel=activeTravelBlock(schedule,sDate);
+              const item={ week:curWeek, phase:wk.phase, type:wk.type, session:s, log };
+              const surface=workoutSurfaceStyle(item);
               return (
-                <div key={s.id} className="card" style={{padding:15,marginBottom:11,
+                <div key={s.id} className="card" style={{...surface,padding:15,marginBottom:11,
                   borderLeft:`3px solid ${sTravel?"var(--deload)":wk.type==="deload"?"var(--deload)":wk.type==="test"?"var(--test)":"var(--line)"}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                     <div style={{flex:1}}>
@@ -2065,8 +2292,11 @@ export default function App(){
                   <strong className="disp">Week {w.week} <span style={{color:"var(--faint)",fontWeight:500,fontSize:13}}>· {w.phase}</span></strong>
                   {w.type!=="normal" && <span className="pill" style={{background:"var(--surface2)",color:PHASE_COLOR[w.type]}}>{w.type}</span>}
                 </div>
-                {w.sessions.map((s,si)=>(
-                  <div key={s.id} style={{padding:"7px 0",borderTop:si?"1px solid var(--line)":"none"}}>
+                {w.sessions.map((s,si)=>{
+                  const log=logs[`${w.week}-${s.id}`];
+                  const surface=workoutSurfaceStyle({ week:w.week, phase:w.phase, type:w.type, session:s, log });
+                  return (
+                  <div key={s.id} style={{...surface,padding:"9px 10px",border:`1px solid ${si?"var(--line)":"transparent"}`,borderRadius:9,marginTop:si?7:0}}>
                     <div style={{fontSize:11,color:"var(--faint)",textTransform:"uppercase",letterSpacing:".04em"}}>{s.day}</div>
                     {edit ? (
                       <textarea className="tinput" rows={2} value={s.focus} style={{marginTop:4,fontSize:13}}
@@ -2085,7 +2315,7 @@ export default function App(){
                       </div>
                     )}
                   </div>
-                ))}
+                );})}
               </div>
             ))}
           </div>
@@ -2095,7 +2325,7 @@ export default function App(){
         {tab==="calendar" && <CalendarView plan={plan} schedule={schedule} setSchedule={setSchedule} logs={logs} onOpenSession={openCalendarSession}/>}
 
         {/* ===== METRICS ===== */}
-        {tab==="metrics" && <Metrics metrics={metrics} setMetrics={setMetrics} planLen={plan.weeks.length} onShowHistory={()=>setShowHistory(true)} hasHistory={completedCycles.length>0}/>}
+        {tab==="metrics" && <Metrics metrics={metrics} setMetrics={setMetrics} logs={logs} plan={plan} onEditLog={({week,session})=>setRunner({week,session})} planLen={plan.weeks.length} onShowHistory={()=>setShowHistory(true)} hasHistory={completedCycles.length>0}/>}
 
         {/* ===== LIBRARY ===== */}
         {tab==="library" && <Library/>}
@@ -2122,19 +2352,49 @@ export default function App(){
 }
 
 /* ============================ METRICS ============================ */
-function Metrics({ metrics, setMetrics, planLen, onShowHistory, hasHistory }){
+function Metrics({ metrics, setMetrics, logs, plan, onEditLog, planLen, onShowHistory, hasHistory }){
   const [w,setW]=useState(metrics.length?"" : 1);
   const [pu,setPu]=useState(""); const [fl,setFl]=useState(""); const [pr,setPr]=useState("");
   const [sl,setSl]=useState(""); const [pn,setPn]=useState("");
+  const [editingMetricWeek,setEditingMetricWeek]=useState(null);
   const add=()=>{ if(!w) return;
-    const entry={week:+w,date:today(),pullups:+pu||null,flash:+fl||null,project:+pr||null,sleep:+sl||null,pain:pn};
+    const existing=metrics.find(x=>x.week===+w);
+    const entry={week:+w,date:existing?.date || today(),pullups:+pu||null,flash:+fl||null,project:+pr||null,sleep:+sl||null,pain:pn,amendedAt:existing?nowIso():existing?.amendedAt};
     setMetrics(m=>[...m.filter(x=>x.week!==+w),entry].sort((a,b)=>a.week-b.week));
+    setPu("");setFl("");setPr("");setSl("");setPn("");setEditingMetricWeek(null);
+  };
+  const editMetric=(m)=>{
+    setEditingMetricWeek(m.week);
+    setW(String(m.week));
+    setPu(m.pullups??"");
+    setFl(m.flash??"");
+    setPr(m.project??"");
+    setSl(m.sleep??"");
+    setPn(m.pain??"");
+  };
+  const clearMetricForm=()=>{
+    setEditingMetricWeek(null);
+    setW("");
     setPu("");setFl("");setPr("");setSl("");setPn("");
   };
-  const first=metrics.find(m=>m.pullups!=null);
-  const lastM=[...metrics].reverse().find(m=>m.pullups!=null);
-  const delta=(first&&lastM&&first.week!==lastM.week)?lastM.pullups-first.pullups:null;
-  const pts=metrics.filter(m=>m.pullups!=null);
+  const deleteMetric=()=>{
+    if(!editingMetricWeek) return;
+    setMetrics(m=>m.filter(x=>x.week!==editingMetricWeek));
+    clearMetricForm();
+  };
+  const weeklyStats=weeklyLogStats(logs,planLen);
+  const activeWeeks=weeklyStats.filter(x=>x.completed || x.volume || x.effort || x.pain);
+  const latestWeek=activeWeeks.at(-1);
+  const latestFlash=latestMetricValue(metrics,"flash");
+  const latestProject=latestMetricValue(metrics,"project");
+  const pullDelta=metricDelta(metrics,"pullups");
+  const flashDelta=metricDelta(metrics,"flash");
+  const projectDelta=metricDelta(metrics,"project");
+  const insights=buildMetricInsights(metrics,weeklyStats);
+  const hasLogs=activeWeeks.length>0;
+  const painWeeks=weeklyStats.filter(x=>x.pain>0).map(x=>x.week);
+  const hardestSend=maxKnown(activeWeeks.map(x=>x.hardestSend));
+  const recentLogs=loggedSessionItems(plan,logs).slice(0,8);
 
   return (
     <div className="stagger">
@@ -2143,17 +2403,41 @@ function Metrics({ metrics, setMetrics, planLen, onShowHistory, hasHistory }){
         {hasHistory&&<button className="btn btn-ghost" style={{padding:"6px 10px",fontSize:12,display:"flex",gap:5,alignItems:"center"}} onClick={onShowHistory}><History size={14}/>History</button>}
       </div>
 
-      {delta!=null && (
-        <div className="card" style={{padding:16,marginBottom:14,display:"flex",alignItems:"center",gap:14}}>
-          <div className="disp" style={{fontSize:40,color:delta>=0?"var(--moss)":"var(--rope)",lineHeight:1}}>{delta>=0?"+":""}{delta}</div>
-          <div style={{fontSize:13,color:"var(--chalk-dim)"}}>clean pull-ups gained<br/>since week {first.week}. The bigger gains are in how efficiently you move — they won't show as a number.</div>
-        </div>
-      )}
+      <MetricDashboard metrics={metrics} weeklyStats={weeklyStats} activeWeeks={activeWeeks} latestWeek={latestWeek} latestFlash={latestFlash} latestProject={latestProject} pullDelta={pullDelta} flashDelta={flashDelta} projectDelta={projectDelta} insights={insights} hasLogs={hasLogs} painWeeks={painWeeks} hardestSend={hardestSend} planLen={planLen}/>
 
-      {pts.length>1 && <Spark pts={pts}/>}
+      <MetricSection title="Recent logs">
+        {recentLogs.length===0 ? (
+          <EmptyMetric text="Session logs will appear here after you save workouts."/>
+        ) : (
+          <div className="card" style={{padding:6}}>
+            {recentLogs.map(item=>{
+              const sends=Object.values(item.log.volumeByGrade||{}).reduce((s,n)=>s+(+n||0),0);
+              const attempts=attemptStats(item.log).count;
+              return (
+                <div key={item.key} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"center",padding:"10px",borderBottom:"1px solid var(--line)"}}>
+                  <div>
+                    <div className="disp" style={{fontSize:13,color:"var(--chalk)"}}>W{item.week} {sessionTitle(item.session)}</div>
+                    <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:3}}>{item.log.date?fmtFullDate(item.log.date):"No date"} - RPE {item.log.rpe || "-"} - {sends} sends - {attempts} tries</div>
+                    {item.log.notes && <div style={{fontSize:12,color:"var(--chalk-dim)",marginTop:5,lineHeight:1.35,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.log.notes}</div>}
+                  </div>
+                  <button className="btn btn-ghost" style={{padding:"7px 9px",display:"flex",alignItems:"center",gap:5,fontSize:12}} onClick={()=>onEditLog(item)}><Pencil size={13}/>Edit</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </MetricSection>
 
       <div className="card" style={{padding:15,marginBottom:14}}>
-        <div className="disp" style={{fontSize:14,marginBottom:10,color:"var(--rope)"}}>Log this week's numbers</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginBottom:10}}>
+          <div className="disp" style={{fontSize:14,color:"var(--rope)"}}>{editingMetricWeek?`Amend week ${editingMetricWeek}`:"Log this week's numbers"}</div>
+          {editingMetricWeek && (
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <button className="btn btn-ghost" title="Delete entry" style={{padding:"4px 7px",display:"flex",alignItems:"center",color:"var(--deload)"}} onClick={deleteMetric}><Trash2 size={13}/></button>
+              <button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:12}} onClick={clearMetricForm}>Cancel</button>
+            </div>
+          )}
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <Field label="Week"><select className="tinput" value={w} onChange={e=>setW(e.target.value)}>
             <option value="">—</option>{Array.from({length:planLen},(_,i)=>i+1).map(n=><option key={n} value={n}>Week {n}</option>)}
@@ -2164,20 +2448,23 @@ function Metrics({ metrics, setMetrics, planLen, onShowHistory, hasHistory }){
           <Field label="Avg sleep (hrs)"><input className="tinput" inputMode="decimal" value={sl} onChange={e=>setSl(e.target.value)}/></Field>
           <Field label="Pain / niggles"><input className="tinput" value={pn} onChange={e=>setPn(e.target.value)}/></Field>
         </div>
-        <button className="btn btn-rope" style={{width:"100%",padding:11,marginTop:12,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={add}><Plus size={16}/>Save entry</button>
+        <button className="btn btn-rope" style={{width:"100%",padding:11,marginTop:12,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={add}><Plus size={16}/>{editingMetricWeek?"Update entry":"Save entry"}</button>
       </div>
 
       {metrics.length>0 && (
         <div className="card" style={{padding:6}}>
           {metrics.map(m=>(
-            <div key={m.week} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 10px",borderBottom:"1px solid var(--line)"}}>
+            <div key={m.week} style={{display:"grid",gridTemplateColumns:"54px 1fr auto",alignItems:"center",gap:10,padding:"10px 10px",borderBottom:"1px solid var(--line)"}}>
               <div className="disp" style={{width:60,fontSize:13,color:"var(--faint)"}}>Wk {m.week}</div>
               <div className="mono" style={{flex:1,fontSize:13}}>
                 {m.pullups!=null&&<span>{m.pullups} PU&nbsp;&nbsp;</span>}
                 {m.flash!=null&&<span style={{color:"var(--chalk-dim)"}}>V{m.flash} flash&nbsp;&nbsp;</span>}
                 {m.project!=null&&<span style={{color:"var(--chalk-dim)"}}>V{m.project} proj</span>}
               </div>
-              {m.pain && <AlertTriangle size={14} style={{color:"var(--deload)"}}/>}
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                {m.pain && <AlertTriangle size={14} style={{color:"var(--deload)"}}/>}
+                <button className="btn btn-ghost" style={{padding:"5px 7px",display:"flex",alignItems:"center",gap:4,fontSize:11}} onClick={()=>editMetric(m)}><Pencil size={12}/>Edit</button>
+              </div>
             </div>
           ))}
         </div>
@@ -2185,23 +2472,140 @@ function Metrics({ metrics, setMetrics, planLen, onShowHistory, hasHistory }){
     </div>
   );
 }
+function MetricDashboard({metrics,weeklyStats,activeWeeks,latestWeek,latestFlash,latestProject,pullDelta,flashDelta,projectDelta,insights,hasLogs,painWeeks,hardestSend,planLen}){
+  return (
+    <>
+      <MetricSection title="Overview">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <MetricCard label="Flash" value={latestFlash!=null?`V${latestFlash}`:"--"} hint={flashDelta?`${fmtSigned(flashDelta.value)} since W${flashDelta.from.week}`:"manual checkpoint"}/>
+          <MetricCard label="Project" value={latestProject!=null?`V${latestProject}`:"--"} hint={projectDelta?`${fmtSigned(projectDelta.value)} since W${projectDelta.from.week}`:"manual checkpoint"}/>
+          <MetricCard label="Pull-ups" value={pullDelta?fmtSigned(pullDelta.value):"--"} hint={pullDelta?`since W${pullDelta.from.week}`:"needs two entries"}/>
+          <MetricCard label="Consistency" value={hasLogs?`${activeWeeks.reduce((s,x)=>s+x.completed,0)}/${planLen*4}`:"--"} hint="sessions logged"/>
+        </div>
+        <div className="card" style={{padding:13,marginTop:8}}>
+          <div className="disp" style={{fontSize:13,color:"var(--rope)",marginBottom:8}}>Coach notes</div>
+          <div style={{display:"grid",gap:8}}>
+            {insights.map((ins,idx)=>(
+              <div key={idx} style={{display:"flex",gap:8,alignItems:"flex-start",fontSize:13,color:"var(--chalk-dim)",lineHeight:1.45}}>
+                {ins.tone==="warn" ? <AlertTriangle size={15} style={{color:"var(--deload)",marginTop:1,flexShrink:0}}/> : <Activity size={15} style={{color:ins.tone==="good"?"var(--moss)":"var(--test)",marginTop:1,flexShrink:0}}/>}
+                <span>{ins.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </MetricSection>
+
+      <MetricSection title="Performance">
+        <CombinedTrendChart metrics={metrics} weeklyStats={weeklyStats}/>
+      </MetricSection>
+
+      <MetricSection title="Load">
+        {!hasLogs ? (
+          <EmptyMetric text="Load, volume, and send stats will appear after sessions are logged."/>
+        ) : (
+          <>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <MetricCard label="Latest volume" value={latestWeek?.volume || 0} hint={latestWeek?`week ${latestWeek.week}`:"no logs"}/>
+              <MetricCard label="Latest effort" value={latestWeek?.effort || 0} hint="RPE weighted"/>
+              <MetricCard label="Sends" value={activeWeeks.reduce((s,x)=>s+x.sends,0)} hint="from session logs"/>
+              <MetricCard label="Hardest send" value={hardestSend!=null?`V${hardestSend}`:"--"} hint="logged volume"/>
+            </div>
+            <div className="card" style={{padding:6}}>
+              {activeWeeks.slice(-6).map(s=>(
+                <div key={s.week} style={{display:"grid",gridTemplateColumns:"48px 1fr auto",gap:10,alignItems:"center",padding:"10px",borderBottom:"1px solid var(--line)"}}>
+                  <div className="disp" style={{fontSize:13,color:"var(--faint)"}}>Wk {s.week}</div>
+                  <div style={{height:7,borderRadius:999,background:"var(--surface2)",overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${Math.min(100,(s.volume/Math.max(1,...activeWeeks.map(x=>x.volume)))*100)}%`,background:"var(--test)"}}/>
+                  </div>
+                  <div className="mono" style={{fontSize:12,color:"var(--chalk-dim)"}}>{s.sends} sends / {s.attempts} tries</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </MetricSection>
+
+      <MetricSection title="Recovery">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <MetricCard label="Status" value={latestWeek?.pain?"Watch":"Clear"} hint={latestWeek?.pain?`${latestWeek.pain} pain flag${latestWeek.pain>1?"s":""}`:"latest logged week"}/>
+          <MetricCard label="Avg RPE" value={latestWeek?.avgRpe?latestWeek.avgRpe.toFixed(1):"--"} hint={latestWeek?`week ${latestWeek.week}`:"no logs"}/>
+          <MetricCard label="Sleep" value={latestMetricValue(metrics,"sleep")?`${latestMetricValue(metrics,"sleep")}h`:"--"} hint="latest checkpoint"/>
+          <MetricCard label="Pain weeks" value={painWeeks.length} hint={painWeeks.length?`W${painWeeks.join(", W")}`:"none logged"}/>
+        </div>
+        {painWeeks.length>0 && (
+          <div className="card" style={{padding:13,marginTop:8,display:"flex",gap:8,alignItems:"flex-start",color:"var(--chalk-dim)",fontSize:13,lineHeight:1.45}}>
+            <AlertTriangle size={15} style={{color:"var(--deload)",marginTop:1,flexShrink:0}}/>
+            <span>Pain markers are a cue to reduce intensity, extend warm-ups, or keep the next climbing day technical.</span>
+          </div>
+        )}
+      </MetricSection>
+    </>
+  );
+}
 function Field({label,children}){return(<label style={{display:"block"}}><div style={{fontSize:11,color:"var(--faint)",marginBottom:4}}>{label}</div>{children}</label>);}
-function Spark({pts}){
-  const w=480,h=90,pad=10;
-  const xs=pts.map(p=>p.week), ys=pts.map(p=>p.pullups);
+function MetricSection({title,children}){
+  return (
+    <section style={{marginBottom:14}}>
+      <div className="disp" style={{fontSize:13,color:"var(--rope)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:8}}>{title}</div>
+      {children}
+    </section>
+  );
+}
+function MetricCard({label,value,hint}){
+  return (
+    <div className="card" style={{padding:13,minHeight:82}}>
+      <div style={{fontSize:11,color:"var(--faint)",marginBottom:6}}>{label}</div>
+      <div className="disp" style={{fontSize:24,lineHeight:1,color:"var(--chalk)"}}>{value}</div>
+      <div style={{fontSize:11,color:"var(--chalk-dim)",marginTop:7,lineHeight:1.25}}>{hint}</div>
+    </div>
+  );
+}
+function EmptyMetric({text}){
+  return <div className="card" style={{padding:14,color:"var(--chalk-dim)",fontSize:13,lineHeight:1.45}}>{text}</div>;
+}
+function fmtSigned(n){ return `${n>0?"+":""}${n}`; }
+function maxKnown(vals){
+  const clean=vals.filter(v=>v!=null);
+  return clean.length ? Math.max(...clean) : null;
+}
+function CombinedTrendChart({metrics,weeklyStats}){
+  const series=[
+    {label:"Pull-ups",color:"var(--rope)",pts:metrics.filter(m=>m.pullups!=null).map(m=>({week:m.week,value:+m.pullups}))},
+    {label:"Flash",color:"var(--moss)",pts:metrics.filter(m=>m.flash!=null).map(m=>({week:m.week,value:+m.flash}))},
+    {label:"Project",color:"var(--test)",pts:metrics.filter(m=>m.project!=null).map(m=>({week:m.week,value:+m.project}))},
+    {label:"Sleep",color:"var(--chalk-dim)",pts:metrics.filter(m=>m.sleep!=null).map(m=>({week:m.week,value:+m.sleep}))},
+    {label:"Volume",color:"var(--deload)",pts:weeklyStats.filter(w=>w.volume>0).map(w=>({week:w.week,value:w.volume}))},
+  ].map(s=>normalizeSeries(s)).filter(s=>s.pts.length>1);
+  if(!series.length) return <EmptyMetric text="Add at least two checkpoints or logged-volume weeks to compare trend lines."/>;
+  const w=480,h=118,pad=12;
+  const all=series.flatMap(s=>s.pts);
+  const xs=all.map(p=>p.week), ys=all.map(p=>p.index);
   const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
   const X=v=>pad+((v-minX)/((maxX-minX)||1))*(w-2*pad);
   const Y=v=>h-pad-((v-minY)/((maxY-minY)||1))*(h-2*pad);
-  const d=pts.map((p,i)=>`${i?"L":"M"}${X(p.week)},${Y(p.pullups)}`).join(" ");
+  const pathFor=arr=>arr.map((p,i)=>`${i?"L":"M"}${X(p.week)},${Y(p.index)}`).join(" ");
   return (
     <div className="card" style={{padding:14,marginBottom:14}}>
-      <div className="disp" style={{fontSize:13,color:"var(--rope)",marginBottom:6}}>Pull-up trend</div>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:90}}>
-        <path d={d} fill="none" stroke="var(--rope)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        {pts.map((p,i)=>(<circle key={i} cx={X(p.week)} cy={Y(p.pullups)} r="3.5" fill="var(--moss)"/>))}
+      <div className="disp" style={{fontSize:13,color:"var(--rope)",marginBottom:6}}>Progress index</div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:118}}>
+        {[0,.5,1].map((n,idx)=><line key={idx} x1={pad} x2={w-pad} y1={pad+n*(h-2*pad)} y2={pad+n*(h-2*pad)} stroke="var(--line)" strokeWidth="1"/>)}
+        {series.map(s=><path key={s.label} d={pathFor(s.pts)} fill="none" stroke={s.color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>)}
+        {series.flatMap(s=>s.pts.map((p,pi)=><circle key={`${s.label}-${pi}`} cx={X(p.week)} cy={Y(p.index)} r="2.8" fill={s.color}/>))}
       </svg>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:4}}>
+        {series.map(s=><span key={s.label} className="mono" style={{fontSize:10,color:s.color}}>{s.label}</span>)}
+      </div>
+      <div style={{fontSize:11,color:"var(--faint)",lineHeight:1.35,textAlign:"center",marginTop:8}}>
+        Each line is normalized 0–100 within its own range. Use this to compare timing and direction, not raw magnitude.
+      </div>
     </div>
   );
+}
+function normalizeSeries(series){
+  const pts=series.pts.filter(p=>Number.isFinite(p.value));
+  if(pts.length<2) return {...series,pts};
+  const min=Math.min(...pts.map(p=>p.value)), max=Math.max(...pts.map(p=>p.value));
+  return {...series,pts:pts.map(p=>({...p,index:max===min?50:((p.value-min)/(max-min))*100}))};
 }
 
 /* ============================ LIBRARY ============================ */
@@ -2268,7 +2672,7 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
     try{
       const blocks=JSON.parse(blockDraft||"[]");
       if(!Array.isArray(blocks)) throw new Error("Travel blocks must be an array");
-      setSchedule(s=>({...s,travelBlocks:blocks}));
+      setSchedule(s=>({...s,travelBlocks:blocks,lastRescheduleUndo:null}));
       setMsg("✓ Travel blocks saved");
     } catch(e){ setMsg("✗ "+e.message); }
   };
@@ -2284,11 +2688,11 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
         </p>
         <div className="card" style={{padding:14,marginBottom:14}}>
           <div className="disp" style={{fontSize:14,color:"var(--rope)",marginBottom:10}}>Schedule</div>
-          <Field label="Plan start date"><input className="tinput" type="date" value={sc.startDate||""} onChange={e=>setSchedule(s=>({...s,startDate:e.target.value}))}/></Field>
+          <Field label="Plan start date"><input className="tinput" type="date" value={sc.startDate||""} onChange={e=>setSchedule(s=>({...s,startDate:e.target.value,lastRescheduleUndo:null}))}/></Field>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
             {SESSION_IDS.map(id=>(
               <Field key={id} label={id==="support"?"Support":`Climb ${id.slice(-1)}`}>
-                <select className="tinput" value={sc.preferredSessionDays?.[id]??0} onChange={e=>setSchedule(s=>({...s,preferredSessionDays:{...s.preferredSessionDays,[id]:+e.target.value}}))}>
+                <select className="tinput" value={sc.preferredSessionDays?.[id]??0} onChange={e=>setSchedule(s=>({...s,preferredSessionDays:{...s.preferredSessionDays,[id]:+e.target.value},lastRescheduleUndo:null}))}>
                   {WEEKDAYS.map((d,i)=><option key={d} value={i}>{d}</option>)}
                 </select>
               </Field>
