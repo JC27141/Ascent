@@ -1247,10 +1247,12 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
   const monthItems=items.filter(i=>monthKey(i.date)===monthKey(viewMonth));
   const monthEffortByDate=monthItems.reduce((acc,i)=>{
     const effort=itemEffort(i).value;
-    acc[i.date]=(acc[i.date]||0)+effort;
+    const cell=acc[i.date]||(acc[i.date]={total:0,support:0,climb:0});
+    cell.total+=effort;
+    if(i.session?.id==="support") cell.support+=effort; else cell.climb+=effort;
     return acc;
   },{});
-  const maxEffort=Math.max(1,...Object.values(monthEffortByDate));
+  const maxEffort=28; // fixed plan-wide ceiling: planned max is 22, logged peak ~28
   const selectedItems=items.filter(i=>i.date===selected);
   const selectedBlocks=travelBlocksOnDate(schedule,selected);
   const upcomingOpen=items.filter(i=>i.date>=selected && isOpenLog(i.log)).slice(0,3);
@@ -1333,14 +1335,18 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
             const blocks=travelBlocksOnDate(schedule,date);
             const conflicts=dayItems.some(i=>i.travel && isOpenLog(i.log));
             const attempts=dayItems.reduce((sum,i)=>sum+attemptStats(i.log).count,0);
-            const effort=monthEffortByDate[date]||0;
+            const cell=monthEffortByDate[date]||{total:0,support:0,climb:0};
+            const effort=cell.total;
             const effortPct=Math.min(1,effort/maxEffort);
+            const isSupportDay=effort>0 && cell.support>cell.climb;
+            const hueRgb=isSupportDay?"102,153,179":"212,103,58";
+            const topAlpha=effort>0?0.07+Math.pow(effortPct,1.8)*0.88:0;
             const inMonth=monthKey(date)===monthKey(viewMonth);
             const selectedDay=date===selected;
             return (
               <button key={date} onClick={()=>setSelected(date)} style={{minHeight:82,padding:6,textAlign:"left",borderRadius:8,cursor:"pointer",
-                border:`1px solid ${selectedDay?"var(--rope)":conflicts?"var(--deload)":"var(--line)"}`,
-                background:`linear-gradient(180deg, rgba(212,103,58,${effortPct*.28}), rgba(42,34,24,.96))`,
+                border:`1px solid ${selectedDay?"var(--rope)":conflicts?"var(--deload)":effort>0?`rgba(${hueRgb},${0.3+effortPct*0.45})`:"var(--line)"}`,
+                background:`linear-gradient(155deg, rgba(${hueRgb},${topAlpha}) 0%, rgba(${hueRgb},${topAlpha*0.4}) 55%, rgba(42,34,24,.96) 100%)`,
                 opacity:inMonth?1:.42,color:"var(--chalk)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                   <span className="mono" style={{fontSize:11,color:date===today()?"var(--rope)":"var(--chalk-dim)"}}>{date.slice(-2)}</span>
@@ -1348,12 +1354,14 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:3}}>
                   {blocks.length>0 && <span style={{height:5,borderRadius:5,background:"var(--deload)"}}/>}
-                  {dayItems.slice(0,2).map(i=>(
-                    <span key={i.key} style={{fontSize:10,lineHeight:1.1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:i.log&&i.log.status!=="skip"?"var(--moss)":"var(--chalk-dim)"}}>
-                      {i.session.id==="support"?"Support":`W${i.week} ${i.session.day.replace("Climb Day ","C")}`}
-                    </span>
-                  ))}
-                  {dayItems.length>2 && <span className="mono" style={{fontSize:9,color:"var(--faint)"}}>+{dayItems.length-2}</span>}
+                  {dayItems.slice(0,3).map(i=>{
+                    const isSup=i.session.id==="support";
+                    const done=i.log&&i.log.status!=="skip";
+                    return (
+                      <span key={i.key} style={{height:4,borderRadius:4,background:isSup?"var(--test)":done?"var(--moss)":"var(--chalk-dim)",opacity:done?1:0.45}}/>
+                    );
+                  })}
+                  {dayItems.length>3 && <span className="mono" style={{fontSize:9,color:"var(--faint)"}}>+{dayItems.length-3}</span>}
                 </div>
               </button>
             );
