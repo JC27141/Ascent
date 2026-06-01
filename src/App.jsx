@@ -46,6 +46,30 @@ input,textarea,select{font-family:'Spline Sans',sans-serif;}
 input[type=range]{accent-color:var(--rope);}
 .tinput{background:var(--granite);border:1px solid var(--line);border-radius:10px;color:var(--chalk);padding:8px 10px;width:100%;}
 .tinput:focus{outline:none;border-color:var(--rope);}
+.demo-panel{position:relative;overflow:hidden;background:linear-gradient(180deg,var(--granite2),var(--granite));border:1px solid var(--line);border-radius:14px;}
+.demo-svg{display:block;width:100%;height:100%;}
+.demo-label{position:absolute;left:10px;right:10px;bottom:8px;text-align:center;font-size:10px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase;}
+.demo-pulse{animation:demoPulse 1.8s ease-in-out infinite;transform-origin:center;}
+.demo-step{animation:demoStep 2.8s ease-in-out infinite;transform-origin:center;}
+.demo-slow{animation:demoSlow 3.2s ease-in-out infinite;transform-origin:center;}
+.demo-swing{animation:demoSwing 2.8s ease-in-out infinite;transform-origin:center;}
+.demo-lower{animation:demoLower 3.2s ease-in-out infinite;transform-origin:center;}
+.demo-raise{animation:demoRaise 2.6s ease-in-out infinite;transform-origin:center;}
+.demo-reach{animation:demoReach 2.7s ease-in-out infinite;transform-origin:center;}
+.demo-knee{animation:demoKnee 2.8s ease-in-out infinite;transform-origin:center;}
+.demo-breathe{animation:demoBreathe 2.4s ease-in-out infinite;transform-origin:center;}
+.demo-dash{animation:demoDash 3s linear infinite;}
+@keyframes demoPulse{0%,100%{opacity:.35;transform:scale(.86);}50%{opacity:1;transform:scale(1.12);}}
+@keyframes demoStep{0%,100%{transform:translate(0,0);}45%,65%{transform:translate(14px,-9px);}}
+@keyframes demoSlow{0%,100%{transform:translate(0,0);}50%{transform:translate(0,15px);}}
+@keyframes demoSwing{0%,100%{transform:rotate(-7deg);}50%{transform:rotate(11deg);}}
+@keyframes demoLower{0%,100%{transform:translateY(-15px);}55%{transform:translateY(15px);}}
+@keyframes demoRaise{0%,100%{transform:rotate(-18deg);}50%{transform:rotate(18deg);}}
+@keyframes demoReach{0%,100%{transform:translate(0,0);}50%{transform:translate(19px,-24px);}}
+@keyframes demoKnee{0%,100%{transform:rotate(0deg);}50%{transform:rotate(24deg);}}
+@keyframes demoBreathe{0%,100%{transform:scale(1);}50%{transform:scale(1.04);}}
+@keyframes demoDash{to{stroke-dashoffset:-42;}}
+@media (prefers-reduced-motion: reduce){.demo-pulse,.demo-step,.demo-slow,.demo-swing,.demo-lower,.demo-raise,.demo-reach,.demo-knee,.demo-breathe,.demo-dash{animation:none;}}
 `;
 
 /* ============================ SEED PLAN ============================ */
@@ -479,6 +503,152 @@ function DrillSheet({ name, onClose }){
   );
 }
 
+const GUIDE = {
+  "Silent / precision feet":{demoId:"precisionFeet",equipment:"Climbing wall",summary:"Place the toe once, quietly, exactly where you meant to.",setup:"Pick easy terrain and choose each foothold before you move.",execution:"Move the toe to the selected spot, weight it gently, then keep it still while the body moves past it.",commonMistake:"Scraping, tapping around, or re-placing the foot after it is weighted.",coachCue:"Land the toe like you are pressing a camera shutter.",repCounting:"Count clean placements, not problems sent.",progression:"Use smaller footholds or steeper terrain.",regression:"Use jugs and big footholds until every placement is quiet."},
+  "Glue feet":{demoId:"glueFeet",equipment:"Climbing wall",summary:"The foot stops moving the instant it touches the hold.",setup:"Choose an easy route and commit to each first placement.",execution:"Place the toe, freeze it, then rotate the hips around that fixed point.",commonMistake:"Letting the shoe pivot, skate, or search after contact.",coachCue:"Toe lands, toe stays.",repCounting:"Count every hold where the foot stays fixed through the next move.",progression:"Add hip turns without allowing the toe to smear.",regression:"Use bigger footholds and slow the pace down."},
+  "Blind-foot placement":{demoId:"blindFoot",equipment:"Climbing wall",summary:"Find a foothold by feel while your eyes stay on the next hand move.",setup:"Rehearse the foothold location before leaving the ground or while resting.",execution:"Look up, move the foot by memory, touch the hold lightly, then weight it only after it feels centered.",commonMistake:"Looking down at the last second or stabbing blindly with tension.",coachCue:"Eyes lead, foot confirms.",repCounting:"Count controlled placements where you never glance down.",progression:"Use smaller feet or longer reaches.",regression:"Practice from the floor on obvious footholds first."},
+  "Straight-arm / resting on skeleton":{demoId:"straightArm",equipment:"Climbing wall",summary:"Save energy by hanging from long arms with active shoulders.",setup:"Find a stable stance where your feet can carry some weight.",execution:"Let the elbow straighten, keep the shoulder gently packed, and breathe before the next move.",commonMistake:"Resting with bent elbows or shrugged shoulders.",coachCue:"Long arm, heavy feet, quiet breath.",repCounting:"Count useful rests where your forearm pump drops.",progression:"Find straight-arm rests on steeper problems.",regression:"Practice on vertical jugs with both feet solid."},
+  "Hip turn + flagging":{demoId:"flag",equipment:"Climbing wall",summary:"Use hip rotation and a free leg as counterbalance instead of over-gripping.",setup:"Stand on one main foot with the opposite leg free.",execution:"Turn one hip toward the wall, let the free leg sweep out, and reach while the body stays quiet.",commonMistake:"Square hips, bent arms, or grabbing extra holds to stop a swing.",coachCue:"Flag before you fight.",repCounting:"Count moves where the flag stops a barn-door swing.",progression:"Use flags on longer reaches.",regression:"Practice on traverses with large handholds."},
+  "Backstep / drop-knee":{demoId:"dropKnee",equipment:"Climbing wall",summary:"Rotate onto the outside edge and drop the knee to bring hips closer.",setup:"Find a foothold near the midline with room to turn the knee inward.",execution:"Set the outside edge, rotate the knee down, pull the hip toward the wall, then reach from the new body position.",commonMistake:"Dropping the knee without pulling the hip in, which still leaves you swinging.",coachCue:"Outside edge first, knee second, hip last.",repCounting:"Count clean drop-knees that create a longer reach.",progression:"Apply it on slightly steeper terrain.",regression:"Use big footholds and stop before knee discomfort."},
+  "Deadpoint / precise catch":{demoId:"deadpoint",equipment:"Climbing wall",summary:"Catch the hold at the top of the movement when the body is briefly weightless.",setup:"Choose a move that is too far to static but does not require a full jump.",execution:"Drive from the legs, float upward, and close the hand exactly as momentum stalls.",commonMistake:"Yanking early, slapping late, or cutting feet because the catch is mistimed.",coachCue:"Catch the quiet moment.",repCounting:"Count attempts with a controlled catch, even if you do not send.",progression:"Use smaller target holds.",regression:"Shorten the distance or use better hands."},
+  "Downclimbing":{demoId:"downclimb",equipment:"Climbing wall",summary:"Reverse easy climbs with the same control you used going up.",setup:"Choose a climb well below your limit with clean downclimb options.",execution:"Look for feet first, lower through the legs, and keep your hands relaxed enough to choose the next hold.",commonMistake:"Rushing, jumping, or downclimbing only with the arms.",coachCue:"Feet find the way down.",repCounting:"Count completed downclimbs, not just starts.",progression:"Downclimb slightly longer routes.",regression:"Downclimb only the top half or traverse low."},
+  "Route-reading routine":{demoId:"routeRead",equipment:"Climbing wall",summary:"Preview holds, body positions, rests, and cruxes before you pull on.",setup:"Stand where you can see the full problem.",execution:"Trace hands and feet, mime the crux, choose likely rests, then rehearse the first three moves twice.",commonMistake:"Only reading handholds and discovering feet mid-climb.",coachCue:"Hands tell the story, feet write the details.",repCounting:"One rep is one complete read before an attempt.",progression:"Call the sequence out loud before trying.",regression:"Read only the first half, then compare after an attempt."},
+  "Falling practice":{demoId:"falling",equipment:"Pads and clear landing",summary:"Build calm, repeatable landing mechanics from low heights.",setup:"Clear the landing, start low, and keep arms relaxed.",execution:"Drop feet-first, bend knees, roll through the landing if needed, and reset before going higher.",commonMistake:"Reaching back with straight arms or practicing from too high too soon.",coachCue:"Soft knees, quiet hands.",repCounting:"Count calm landings only.",progression:"Increase height gradually after several easy landings.",regression:"Step off from a low hold or practice on the floor."},
+  "Eccentric (negative) pull-ups":{demoId:"pullupLower",equipment:"Pull-up bar or assisted machine",summary:"Build pulling strength by controlling the lowering phase.",setup:"Start with chin over the bar using a box, jump, or assistance.",execution:"Brace, pull shoulders down, then lower for the full count until arms are long.",commonMistake:"Dropping quickly through the hard middle range.",coachCue:"Own every inch down.",repCounting:"One rep is one controlled 4-5 second lower.",progression:"Add time before adding reps.",regression:"Use more assistance or shorten the range."},
+  "Band / machine-assisted pull-ups":{demoId:"assistedPullup",equipment:"Band or assisted pull-up machine",summary:"Practice full clean pull-up reps with enough assistance to avoid grinding.",setup:"Set assistance so every rep can finish with good shoulder position.",execution:"Start from active shoulders, pull chest toward the bar, pause briefly, and lower under control.",commonMistake:"Kicking, craning the neck, or using too little assistance.",coachCue:"Smooth beats heroic.",repCounting:"Count only full-range clean reps.",progression:"Reduce assistance slightly.",regression:"Increase assistance or use slow negatives."},
+  "Clean reps just shy of failure":{demoId:"cleanPullup",equipment:"Pull-up bar",summary:"Accumulate quality pull-ups while leaving one good rep in reserve.",setup:"Choose a set size that never turns into a grind.",execution:"Use the same start, pull, pause, and controlled lower on every rep.",commonMistake:"Chasing failure until the final reps change shape.",coachCue:"Stop while the next rep would still be clean.",repCounting:"Count clean reps only; ugly reps are feedback.",progression:"Add a rep across total sets.",regression:"Use assistance or return to eccentrics."},
+  "Active / scapular hangs":{demoId:"scapHang",equipment:"Pull-up bar",summary:"Teach shoulders to stay engaged under hanging load.",setup:"Hang with arms straight and feet lightly supported if needed.",execution:"Without bending elbows, pull shoulder blades down, pause, then return slowly.",commonMistake:"Bending the elbows or relaxing into the ears.",coachCue:"Shoulders away from ears.",repCounting:"One rep is down, hold, slow release.",progression:"Longer pauses or full bodyweight.",regression:"Keep feet on the floor for support."},
+  "Dynamic warm-up (circles, reach-and-roll, Egyptians)":{demoId:"warmup",equipment:"Open floor space or light band",summary:"Prime shoulders and upper back before loading fingers or pulling hard.",setup:"Stand tall and move through pain-free ranges.",execution:"Circle shoulders, reach and roll the upper back, then add slow Egyptian rotations.",commonMistake:"Rushing through tiny ranges while still cold.",coachCue:"Wake the joints before asking for power.",repCounting:"Use time: about two smooth minutes.",progression:"Add a light band for control.",regression:"Use smaller circles and slower breaths."},
+  "External rotations":{demoId:"externalRotation",equipment:"Light band or cable",summary:"Train the rotator cuff position climbing often neglects.",setup:"Pin elbow at your side at 90 degrees with a towel if useful.",execution:"Rotate the forearm outward without letting the elbow drift, then return slowly.",commonMistake:"Twisting the torso or using a band that is too heavy.",coachCue:"Elbow pinned, forearm opens.",repCounting:"Count smooth outward rotations.",progression:"Slightly more band tension.",regression:"Move closer to the anchor or use no band."},
+  "Reverse fly":{demoId:"reverseFly",equipment:"Light dumbbells or bands",summary:"Strengthen the rear shoulder and shoulder blade control.",setup:"Hinge at the hips with a long spine and soft knees.",execution:"Lift arms out to the sides, squeeze shoulder blades lightly, and lower with control.",commonMistake:"Shrugging or swinging the weights.",coachCue:"Wide arms, low shoulders.",repCounting:"Count controlled raises with no momentum.",progression:"Add a small load.",regression:"Use no weight and shorter range."},
+  "Scaption raise":{demoId:"scaption",equipment:"Light dumbbells",summary:"Build cuff-friendly overhead control in the scapular plane.",setup:"Stand tall with thumbs up and arms slightly forward of your sides.",execution:"Raise to shoulder height, pause, and lower slowly.",commonMistake:"Going too heavy and shrugging.",coachCue:"Thumbs up, shoulders down.",repCounting:"Count smooth raises to shoulder height.",progression:"Add load only if shoulders stay quiet.",regression:"Use no weight or raise lower."},
+  "Y / T / L band raises":{demoId:"ytl",equipment:"Light band",summary:"Train lower trap, mid trap, and cuff positions in one small circuit.",setup:"Lean slightly and keep the band light enough to trace clean shapes.",execution:"Trace a Y, then T, then L with slow control and no shrug.",commonMistake:"Turning it into a heavy arm exercise.",coachCue:"Draw letters with shoulder blades, not ego.",repCounting:"Count one Y, one T, and one L as a mini round.",progression:"Add a second round.",regression:"Do the letters without a band."},
+  "Push-ups (or light overhead press)":{demoId:"pushup",equipment:"Floor or light dumbbells",summary:"Balance climbing's pulling volume with controlled pushing.",setup:"Choose push-ups, incline push-ups, or a light press that stays pain-free.",execution:"Brace the trunk, lower smoothly, press without flaring wildly, and stop before form fades.",commonMistake:"Letting hips sag or chasing fatigue for its own sake.",coachCue:"One clean line from ribs to hips.",repCounting:"Count controlled reps with a stable trunk.",progression:"Lower the incline or add light press load.",regression:"Use wall or bench push-ups."},
+  "Wrist extensor work":{demoId:"wristExtensor",equipment:"Light dumbbell or band",summary:"Condition the forearm extensors to support elbow health.",setup:"Support the forearm with palm facing down.",execution:"Lift the back of the hand slowly, pause, then lower with control.",commonMistake:"Using heavy weight and turning it into a jerky wrist curl.",coachCue:"Small muscle, small load.",repCounting:"Count smooth lifts, especially the lowering phase.",progression:"Add a few reps before adding load.",regression:"Use a lighter object or band."},
+  "Hanging leg / knee raises":{demoId:"kneeRaise",equipment:"Pull-up bar",summary:"Train trunk tension while hanging with controlled shoulders.",setup:"Start in an active hang with ribs down.",execution:"Raise knees or legs without swinging, pause, and lower slowly.",commonMistake:"Using momentum or letting shoulders collapse.",coachCue:"Zip knees up, melt them down.",repCounting:"Count no-swing raises.",progression:"Straighter legs or slower lowers.",regression:"Bent knees or captain's chair support."},
+  "Front & side planks":{demoId:"plank",equipment:"Floor",summary:"Build anti-extension and side-body stiffness for stable climbing positions.",setup:"Set elbows under shoulders and make a straight line from ribs to hips.",execution:"Brace gently, breathe, and hold without sagging or piking.",commonMistake:"Holding longer after the shape has already failed.",coachCue:"Shorter perfect holds beat long messy ones.",repCounting:"Use seconds with clean position.",progression:"Add side plank leg raise.",regression:"Drop knees or shorten the hold."},
+  "Bird-dog / Pallof press":{demoId:"birdDog",equipment:"Floor or cable/band",summary:"Resist rotation while limbs move, like staying quiet on the wall.",setup:"For bird-dog, start on all fours. For Pallof, stand side-on to a band.",execution:"Extend opposite limbs or press the band straight out while the torso stays still.",commonMistake:"Opening the hip, twisting the ribs, or rushing.",coachCue:"Move limbs; keep trunk boring.",repCounting:"Count stable reps per side.",progression:"Longer pauses or more band tension.",regression:"Shorten the limb reach or reduce tension."},
+  "Single-leg step-ups":{demoId:"stepUp",equipment:"Box or bench",summary:"Build leg drive for high steps and stable stands.",setup:"Put the whole foot on a box at a height you can control.",execution:"Drive through the working foot, stand tall, then lower slowly without dropping.",commonMistake:"Pushing off the floor leg or letting the knee cave inward.",coachCue:"Stand up through the foothold.",repCounting:"Count controlled reps per side.",progression:"Higher box or light load.",regression:"Lower box or hand support."},
+  "Edging calf raises":{demoId:"calfRaise",equipment:"Step or small edge",summary:"Train ankle stiffness for standing on small footholds.",setup:"Stand with the front of the foot on an edge and hold support if needed.",execution:"Rise through the big toe side, pause, then lower with control.",commonMistake:"Rolling ankles outward or bouncing through reps.",coachCue:"Press the edge, do not bounce it.",repCounting:"Count smooth raises.",progression:"Single-leg reps.",regression:"Use both feet and hand support."},
+  "Eccentric heel drops":{demoId:"heelDrop",equipment:"Step",summary:"Condition the Achilles and calf by controlling the lowering phase.",setup:"Rise with both feet, then shift weight to one side.",execution:"Lower one heel below the step slowly, reset with both feet, and repeat.",commonMistake:"Dropping fast or forcing painful depth.",coachCue:"Slow lower, easy reset.",repCounting:"Count slow lowers per side.",progression:"Longer lowers or light load.",regression:"Reduce depth or use both feet."},
+  "Intrinsic foot work":{demoId:"intrinsicFoot",equipment:"Towel or light band",summary:"Strengthen small foot muscles that help precision and shoe control.",setup:"Sit or stand with the foot flat and relaxed.",execution:"Shorten the arch, curl toes lightly, or press outward into a band without gripping hard.",commonMistake:"Cramping from over-squeezing the toes.",coachCue:"Quiet foot, small effort.",repCounting:"Use short time blocks or smooth curls.",progression:"Stand while keeping balance.",regression:"Seated work with less effort."},
+  "Foot-supported (assisted) hangs":{demoId:"assistedHang",equipment:"Large edge and floor support",summary:"Prepare finger tissues without full bodyweight hanging.",setup:"Use a comfortable edge with feet taking real weight.",execution:"Set shoulders, lightly load the fingers for 8-10 seconds, then step down before strain appears.",commonMistake:"Turning a prep drill into a max hang.",coachCue:"Feet make it easy; fingers just learn.",repCounting:"Count pain-free easy hangs only.",progression:"Slightly less foot support after weeks of comfort.",regression:"More foot support or skip entirely if anything complains."},
+};
+
+const guideFor = (exercise) => GUIDE[exercise.n] || {
+  demoId:"cueCard",
+  equipment:"Bodyweight",
+  summary:exercise.h,
+  setup:"Start with a load and range you can control.",
+  execution:"Move slowly enough that the target position stays clear.",
+  commonMistake:"Rushing the rep or chasing fatigue after form changes.",
+  coachCue:"Quality first.",
+  repCounting:"Count only clean reps.",
+};
+
+function MovementDemo({ id="cueCard", compact=false, label="" }){
+  const s={fill:"none",stroke:"var(--rope)",strokeWidth:5,strokeLinecap:"round",strokeLinejoin:"round"};
+  const soft={fill:"none",stroke:"var(--chalk-dim)",strokeWidth:3,strokeLinecap:"round",strokeLinejoin:"round"};
+  const moss={fill:"none",stroke:"var(--moss)",strokeWidth:5,strokeLinecap:"round",strokeLinejoin:"round"};
+  const wall=<line x1="22" y1="14" x2="22" y2="136" stroke="var(--line)" strokeWidth="4"/>;
+  const hold=(x,y,w=20)=><path d={`M${x} ${y} l${w} -5 l0 13 l-${w} 0 z`} fill="var(--surface2)" stroke="var(--line)" strokeWidth="2"/>;
+  const head=(cx,cy,props=s)=><circle cx={cx} cy={cy} r="8" {...props}/>;
+  const scene=(()=>{
+    switch(id){
+      case "precisionFeet": case "glueFeet": case "blindFoot":
+        return <>{wall}{hold(22,102,30)}<circle className="demo-pulse" cx="52" cy="98" r="12" {...moss}/><g className="demo-step"><path d="M78 58 l-20 40" {...s}/><path d="M58 98 l-16 0" {...s}/></g><path d="M82 58 l18 -14" {...soft}/><circle cx="103" cy="42" r="4" fill="var(--moss)"/></>;
+      case "straightArm": case "scapHang": case "assistedHang":
+        return <><line x1="38" y1="24" x2="118" y2="24" stroke="var(--line)" strokeWidth="7" strokeLinecap="round"/><g className={id==="scapHang"?"demo-slow":"demo-breathe"}>{head(78,51)}<line x1="78" y1="59" x2="78" y2="98" {...s}/><line x1="78" y1="65" x2="54" y2="29" {...s}/><line x1="78" y1="65" x2="102" y2="29" {...s}/><line x1="78" y1="98" x2="60" y2="126" {...s}/><line x1="78" y1="98" x2="96" y2="126" {...s}/></g>{id==="assistedHang"&&<line x1="34" y1="130" x2="122" y2="130" stroke="var(--moss)" strokeWidth="5" strokeLinecap="round"/>}</>;
+      case "flag":
+        return <>{wall}{hold(22,94,26)}<g className="demo-swing" style={{transformOrigin:"58px 82px"}}>{head(62,36)}<line x1="62" y1="44" x2="58" y2="82" {...s}/><line x1="61" y1="55" x2="36" y2="46" {...s}/><line x1="58" y1="82" x2="43" y2="116" {...s}/><path d="M58 82 q36 6 56 34" {...s}/></g></>;
+      case "dropKnee":
+        return <>{wall}{hold(22,102,24)}<g>{head(64,35)}<line x1="64" y1="43" x2="64" y2="82" {...s}/><line x1="64" y1="54" x2="38" y2="46" {...s}/><line x1="64" y1="82" x2="42" y2="110" {...s}/><path className="demo-knee" style={{transformOrigin:"86px 91px"}} d="M64 82 l28 7 l-17 27" {...s}/></g><path className="demo-pulse" d="M80 86 q-18 10 -44 8" {...moss}/></>;
+      case "deadpoint":
+        return <>{wall}{hold(22,112,22)}<circle cx="104" cy="36" r="9" {...moss}/><path className="demo-dash" d="M48 104 q20 -62 56 -68" stroke="var(--chalk-dim)" strokeWidth="3" fill="none" strokeLinecap="round" strokeDasharray="4 8"/><g className="demo-reach">{head(48,92)}<line x1="48" y1="100" x2="48" y2="122" {...s}/><line x1="48" y1="106" x2="32" y2="96" {...s}/><line x1="48" y1="106" x2="66" y2="78" {...s}/></g></>;
+      case "downclimb":
+        return <>{wall}{hold(22,50,24)}{hold(22,92,28)}{hold(22,124,24)}<g className="demo-slow">{head(62,54)}<line x1="62" y1="62" x2="58" y2="96" {...s}/><line x1="58" y1="96" x2="40" y2="124" {...s}/><line x1="58" y1="96" x2="78" y2="120" {...s}/><line x1="62" y1="72" x2="34" y2="52" {...s}/></g></>;
+      case "routeRead":
+        return <>{wall}{[34,58,84,112].map((y,i)=><circle key={y} cx={42+i*20} cy={y} r="6" fill={i%2?"var(--rope)":"var(--moss)"}/>) }<path className="demo-dash" d="M42 112 C54 86 72 84 62 58 S88 42 102 34" stroke="var(--chalk-dim)" strokeWidth="4" fill="none" strokeLinecap="round" strokeDasharray="5 9"/><path d="M84 116 q18 8 32 0" {...moss}/></>;
+      case "falling":
+        return <><rect x="28" y="120" width="96" height="12" rx="6" fill="var(--surface2)" stroke="var(--line)" strokeWidth="2"/><g className="demo-slow">{head(74,44)}<line x1="74" y1="52" x2="74" y2="82" {...s}/><line x1="74" y1="63" x2="54" y2="78" {...s}/><line x1="74" y1="63" x2="94" y2="78" {...s}/><line x1="74" y1="82" x2="58" y2="110" {...s}/><line x1="74" y1="82" x2="92" y2="110" {...s}/></g><path d="M54 112 q20 16 44 0" {...moss}/></>;
+      case "pullupLower": case "assistedPullup": case "cleanPullup":
+        return <><line x1="34" y1="28" x2="120" y2="28" stroke="var(--line)" strokeWidth="7" strokeLinecap="round"/><g className={id==="pullupLower"?"demo-lower":"demo-slow"}>{head(77,50)}<line x1="77" y1="58" x2="77" y2="95" {...s}/><line x1="77" y1="64" x2="55" y2="30" {...s}/><line x1="77" y1="64" x2="99" y2="30" {...s}/><line x1="77" y1="95" x2="60" y2="124" {...s}/><line x1="77" y1="95" x2="94" y2="124" {...s}/></g>{id==="assistedPullup"&&<path d="M77 96 q-18 18 0 34 q18 -16 0 -34" fill="none" stroke="var(--moss)" strokeWidth="4"/>}</>;
+      case "warmup": case "externalRotation": case "reverseFly": case "scaption": case "ytl":
+        return <><line x1="76" y1="52" x2="76" y2="98" {...s}/>{head(76,40)}<line x1="76" y1="98" x2="58" y2="126" {...s}/><line x1="76" y1="98" x2="94" y2="126" {...s}/><line x1="38" y1="74" x2="116" y2="74" stroke="var(--line)" strokeWidth="3" strokeDasharray="4 7"/><path className="demo-raise" style={{transformOrigin:"76px 62px"}} d="M76 62 l-30 2" {...s}/><path className="demo-raise" style={{transformOrigin:"76px 62px",animationDelay:".25s"}} d="M76 62 l30 2" {...s}/><circle className="demo-pulse" cx="46" cy="64" r="5" fill="var(--moss)" stroke="none"/></>;
+      case "pushup": case "plank":
+        return <><line x1="28" y1="122" x2="124" y2="122" stroke="var(--line)" strokeWidth="5" strokeLinecap="round"/><g className={id==="pushup"?"demo-slow":"demo-breathe"}><circle cx="48" cy="82" r="8" {...s}/><line x1="56" y1="86" x2="98" y2="102" {...s}/><line x1="66" y1="90" x2="54" y2="120" {...s}/><line x1="98" y1="102" x2="118" y2="120" {...s}/></g></>;
+      case "wristExtensor":
+        return <><line x1="38" y1="88" x2="94" y2="88" {...s}/><path className="demo-raise" style={{transformOrigin:"94px 88px"}} d="M94 88 l30 -8" {...s}/><rect x="116" y="72" width="12" height="18" rx="3" fill="var(--surface2)" stroke="var(--line)" strokeWidth="2"/><line x1="34" y1="104" x2="120" y2="104" stroke="var(--line)" strokeWidth="4" strokeLinecap="round"/></>;
+      case "kneeRaise":
+        return <><line x1="38" y1="24" x2="116" y2="24" stroke="var(--line)" strokeWidth="7" strokeLinecap="round"/><g>{head(76,50)}<line x1="76" y1="58" x2="76" y2="90" {...s}/><line x1="76" y1="64" x2="54" y2="28" {...s}/><line x1="76" y1="64" x2="98" y2="28" {...s}/><path className="demo-raise" style={{transformOrigin:"76px 90px"}} d="M76 90 l-18 30 M76 90 l20 30" {...s}/></g></>;
+      case "birdDog":
+        return <><line x1="28" y1="118" x2="126" y2="118" stroke="var(--line)" strokeWidth="5" strokeLinecap="round"/><circle cx="54" cy="72" r="7" {...s}/><line x1="61" y1="76" x2="92" y2="90" {...s}/><path className="demo-reach" d="M62 78 l-26 -12" {...s}/><path className="demo-reach" style={{animationDelay:".25s"}} d="M92 90 l30 18" {...s}/><line x1="72" y1="82" x2="58" y2="116" {...s}/><line x1="88" y1="88" x2="82" y2="116" {...s}/></>;
+      case "stepUp":
+        return <><rect x="66" y="92" width="54" height="32" rx="4" fill="var(--surface2)" stroke="var(--line)" strokeWidth="2"/><g className="demo-step">{head(50,45)}<line x1="50" y1="53" x2="52" y2="88" {...s}/><line x1="52" y1="88" x2="76" y2="104" {...s}/><line x1="52" y1="88" x2="40" y2="120" {...s}/><line x1="50" y1="62" x2="70" y2="72" {...s}/></g></>;
+      case "calfRaise": case "heelDrop": case "intrinsicFoot":
+        return <><rect x="38" y="110" width="86" height="10" rx="4" fill="var(--surface2)" stroke="var(--line)" strokeWidth="2"/><g className={id==="heelDrop"?"demo-slow":"demo-raise"} style={{transformOrigin:"78px 110px"}}><line x1="76" y1="40" x2="76" y2="92" {...s}/><line x1="76" y1="92" x2="58" y2="110" {...s}/><line x1="76" y1="92" x2="96" y2="110" {...s}/><path d="M58 110 q16 -9 34 0" {...moss}/></g><circle className="demo-pulse" cx="64" cy="110" r="5" fill="var(--moss)" stroke="none"/></>;
+      default:
+        return <><circle className="demo-pulse" cx="76" cy="46" r="18" {...moss}/><path d="M42 94 h68" {...s}/><path d="M50 114 h52" {...soft}/><path d="M62 74 h28" {...soft}/></>;
+    }
+  })();
+  return (
+    <div className="demo-panel" style={{height:compact?96:190}}>
+      <svg className="demo-svg" viewBox="0 0 152 144" role="img" aria-label={label||"Movement demo"}>{scene}</svg>
+      <div className="demo-label">{compact?"Preview":"Looping guide"}</div>
+    </div>
+  );
+}
+
+function GuideBlock({ title, color="var(--rope)", children }){
+  if(!children) return null;
+  return (
+    <div style={{marginTop:14,padding:"12px 13px",background:"var(--granite)",border:"1px solid var(--line)",borderRadius:12}}>
+      <div className="disp" style={{fontSize:11,letterSpacing:".09em",textTransform:"uppercase",color,marginBottom:5}}>{title}</div>
+      <div style={{fontSize:14,lineHeight:1.5,color:"var(--chalk-dim)"}}>{children}</div>
+    </div>
+  );
+}
+
+function DrillSheetV2({ name, onClose }){
+  const e=exByName(name);
+  if(!e) return null;
+  const d=guideFor(e);
+  return (
+    <div onClick={onClose} className="ct-root" style={{position:"fixed",inset:0,zIndex:70,background:"rgba(8,6,4,.62)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div onClick={ev=>ev.stopPropagation()} className="card fadein" style={{width:"100%",maxWidth:560,borderRadius:"20px 20px 0 0",padding:"8px 18px 28px",maxHeight:"88vh",overflowY:"auto",background:"linear-gradient(180deg,var(--surface),var(--granite))"}}>
+        <div style={{width:42,height:4,background:"var(--line)",borderRadius:4,margin:"8px auto 18px"}}/>
+        <MovementDemo id={d.demoId} label={e.n}/>
+        <div style={{marginTop:14}}>
+          <h2 className="disp" style={{fontSize:22,margin:"0 0 8px",lineHeight:1.12}}>{e.n}</h2>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+            <span className="pill" style={{background:"var(--surface2)",color:"var(--rope)"}}>{e.c}</span>
+            <span className="pill mono" style={{background:"var(--surface2)",color:"var(--chalk-dim)"}}>{e.d}</span>
+            <span className="pill" style={{background:"var(--surface2)",color:"var(--moss)"}}>{d.equipment}</span>
+          </div>
+          <p style={{margin:0,fontSize:15,lineHeight:1.5,color:"var(--chalk)"}}>{d.summary}</p>
+        </div>
+        <GuideBlock title="How" color="var(--moss)">
+          <p style={{margin:"0 0 8px"}}><strong style={{color:"var(--chalk)"}}>Set up: </strong>{d.setup}</p>
+          <p style={{margin:0}}><strong style={{color:"var(--chalk)"}}>Do it: </strong>{d.execution}</p>
+        </GuideBlock>
+        <GuideBlock title="Cues">
+          <p style={{margin:"0 0 8px"}}>{d.coachCue}</p>
+          <p style={{margin:0}}><strong style={{color:"var(--chalk)"}}>Count: </strong>{d.repCounting}</p>
+        </GuideBlock>
+        <GuideBlock title="Watch for" color="var(--deload)">{d.commonMistake}</GuideBlock>
+        {(d.progression || d.regression) && (
+          <GuideBlock title="Scale" color="var(--test)">
+            {d.regression && <p style={{margin:"0 0 8px"}}><strong style={{color:"var(--chalk)"}}>Easier: </strong>{d.regression}</p>}
+            {d.progression && <p style={{margin:0}}><strong style={{color:"var(--chalk)"}}>Harder: </strong>{d.progression}</p>}
+          </GuideBlock>
+        )}
+        <div style={{marginTop:14}}><Timer initial={60}/></div>
+        <button className="btn btn-ghost" style={{width:"100%",padding:12,marginTop:18}} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 function RoutineSheet({ rkey, week, onClose, onDrill }){
   const r=ROUTINES[rkey]; if(!r) return null;
   const list=EX.filter(e=>e.c===r.cat && (!e.g || !week || e.g<=week));
@@ -492,14 +662,16 @@ function RoutineSheet({ rkey, week, onClose, onDrill }){
         </div>
         <p style={{margin:"0 0 14px",fontSize:13,color:"var(--faint)"}}>{list.length} exercise{list.length!==1?"s":""} · tap any for the full how-to</p>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {list.map(e=>(
+          {list.map(e=>{ const g=guideFor(e); return (
             <button key={e.n} onClick={()=>onDrill&&onDrill(e.n)} className="card" style={{padding:13,textAlign:"left",cursor:"pointer",background:"var(--granite)",color:"var(--chalk)"}}>
+              <div style={{marginBottom:9}}><MovementDemo id={g.demoId} compact label={e.n}/></div>
               <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
                 <strong style={{fontSize:14}}>{e.n}</strong>
                 <span className="mono" style={{fontSize:10,color:"var(--faint)",whiteSpace:"nowrap"}}>{e.d}</span>
               </div>
+              <p style={{margin:"6px 0 0",fontSize:13,color:"var(--chalk-dim)",lineHeight:1.45}}>{g.summary}</p>
             </button>
-          ))}
+          );})}
         </div>
         <button className="btn btn-ghost" style={{width:"100%",padding:12,marginTop:18}} onClick={onClose}>Close</button>
       </div>
@@ -1045,7 +1217,7 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
 
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:50,overflowY:"auto"}}>
-      {d && <DrillSheet name={d} onClose={()=>setD(null)}/>}
+      {d && <DrillSheetV2 name={d} onClose={()=>setD(null)}/>}
       <div style={{position:"relative",zIndex:1,maxWidth:520,margin:"0 auto",padding:"18px 16px 40px"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
           <div>
@@ -1082,15 +1254,16 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
               {session.drills && session.drills.length>0 && (
                 <div className="stagger" style={{display:"flex",flexDirection:"column",gap:10,marginTop:16}}>
                   <div className="pill" style={{color:"var(--rope)",background:"transparent",padding:0,letterSpacing:".1em"}}>Drills to apply while climbing · tap for detail</div>
-                  {session.drills.map(dn=>{ const e=exByName(dn); if(!e) return null; const det=DETAIL[dn]||{};
+                  {session.drills.map(dn=>{ const e=exByName(dn); if(!e) return null; const det=guideFor(e);
                     return (
                       <button key={dn} onClick={()=>setD(dn)} className="card" style={{padding:14,textAlign:"left",cursor:"pointer",background:"var(--surface)",color:"var(--chalk)"}}>
+                        <div style={{marginBottom:10}}><MovementDemo id={det.demoId} compact label={e.n}/></div>
                         <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
                           <strong className="disp" style={{fontSize:16}}>{e.n}</strong>
                           <span className="mono" style={{fontSize:11,color:"var(--faint)",whiteSpace:"nowrap"}}>{e.d}</span>
                         </div>
-                        {det.look && <p style={{margin:"6px 0 0",fontSize:14,color:"var(--chalk-dim)",lineHeight:1.5}}>{det.look}</p>}
-                        <span style={{fontSize:12,color:"var(--rope)",marginTop:6,display:"inline-block"}}>How &amp; why →</span>
+                        <p style={{margin:"6px 0 0",fontSize:14,color:"var(--chalk-dim)",lineHeight:1.5}}>{det.summary}</p>
+                        <span style={{fontSize:12,color:"var(--rope)",marginTop:6,display:"inline-block"}}>How &amp; cues</span>
                       </button>
                     );})}
                 </div>
@@ -1105,14 +1278,15 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
               </h2>
               <p style={{margin:"0 0 12px",fontSize:13,color:"var(--faint)"}}>Part of today's session — tap a card for the full how-to.</p>
               <div className="stagger" style={{display:"flex",flexDirection:"column",gap:10}}>
-                {EX.filter(e=>e.c===cat && (!e.g || e.g<=week)).map(e=>{ const det=DETAIL[e.n]||{};
+                {EX.filter(e=>e.c===cat && (!e.g || e.g<=week)).map(e=>{ const det=guideFor(e);
                   return (
                   <button key={e.n} onClick={()=>setD(e.n)} className="card" style={{padding:14,textAlign:"left",cursor:"pointer",background:"var(--surface)",color:"var(--chalk)"}}>
+                    <div style={{marginBottom:10}}><MovementDemo id={det.demoId} compact label={e.n}/></div>
                     <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
                       <strong className="disp" style={{fontSize:16}}>{e.n}</strong>
                       <span className="mono" style={{fontSize:11,color:"var(--faint)",whiteSpace:"nowrap"}}>{e.d}</span>
                     </div>
-                    <p style={{margin:"6px 0 0",fontSize:14,color:"var(--chalk-dim)",lineHeight:1.5}}>{det.look||e.h}</p>
+                    <p style={{margin:"6px 0 0",fontSize:14,color:"var(--chalk-dim)",lineHeight:1.5}}>{det.summary}</p>
                   </button>
                 );})}
               </div>
@@ -1187,7 +1361,7 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
                   </div>
                   {[0,1,2,3,4,5].map(g=>(
                     <div key={g} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                      <button onClick={()=>bumpAttempts(g,-1)} style={{width:28,height:28,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--faint)",cursor:"pointer",fontSize:17,lineHeight:1}}>â€“</button>
+                      <button onClick={()=>bumpAttempts(g,-1)} style={{width:28,height:28,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--faint)",cursor:"pointer",fontSize:17,lineHeight:1}}>–</button>
                       <div className="disp mono" style={{width:36,textAlign:"center",fontSize:13,color:"var(--chalk-dim)"}}>V{g}</div>
                       <div style={{flex:1,height:8,background:"var(--surface2)",borderRadius:8,overflow:"hidden"}}>
                         <div style={{width:`${Math.min(100,(+attempts[g]||0)*12)}%`,height:"100%",background:"var(--test)",borderRadius:8}}/>
@@ -2422,7 +2596,7 @@ export default function App(){
       {manage && <Manage data={currentAppData()} onReplace={replaceAppData} setPlan={setPlan} setSchedule={setSchedule} onClose={()=>setManage(false)}/>}
       {completionModal && <PlanCompletionModal plan={plan} logs={logs} metrics={metrics} schedule={schedule} completedCycles={completedCycles} onStart={archiveAndStartNewCycle} onClose={()=>setCompletionModal(null)}/>}
       {showHistory && <CycleHistoryView completedCycles={completedCycles} onClose={()=>setShowHistory(false)}/>}
-      {drill && <DrillSheet name={drill} onClose={()=>setDrill(null)}/>}
+      {drill && <DrillSheetV2 name={drill} onClose={()=>setDrill(null)}/>}
       {routine && <RoutineSheet rkey={routine} week={curWeek} onClose={()=>setRoutine(null)} onDrill={(n)=>setDrill(n)}/>}
     </div>
   );
@@ -2708,23 +2882,24 @@ function Library(){
           <div className="disp" style={{fontSize:13,color:"var(--rope)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
             {React.createElement(CAT_ICON[cat]||Activity,{size:15})}{cat}
           </div>
-          {EX.filter(e=>e.c===cat).map(e=>(
+          {EX.filter(e=>e.c===cat).map(e=>{ const g=guideFor(e); return (
             <div key={e.n} className="card" style={{padding:13,marginBottom:8,cursor:"pointer"}} onClick={()=>setOpen(open===e.n?null:e.n)}>
               <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
                 <strong style={{fontSize:14,display:"flex",alignItems:"center",gap:6}}>{e.g&&<Lock size={12} style={{color:"var(--faint)"}}/>}{e.n}</strong>
                 <span className="mono" style={{fontSize:10,color:"var(--faint)",whiteSpace:"nowrap"}}>{e.d}</span>
               </div>
               {open===e.n && (
-                <div className="fadein" style={{marginTop:10,display:"flex",gap:12}}>
-                  {DETAIL[e.n]?.fig && <div style={{width:74,height:74,flexShrink:0,background:"var(--granite)",borderRadius:10,border:"1px solid var(--line)",padding:5}}><Figure id={DETAIL[e.n].fig}/></div>}
-                  <div>
-                    {DETAIL[e.n]?.look && <p style={{margin:"0 0 6px",fontSize:13,lineHeight:1.5}}><span style={{color:"var(--moss)"}}>Looks like — </span>{DETAIL[e.n].look}</p>}
-                    <p style={{margin:0,fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>{e.h}</p>
+                <div className="fadein" style={{marginTop:10,display:"grid",gridTemplateColumns:"96px minmax(0,1fr)",gap:12,alignItems:"start"}}>
+                  <MovementDemo id={g.demoId} compact label={e.n}/>
+                  <div style={{minWidth:0}}>
+                    <p style={{margin:"0 0 6px",fontSize:13,lineHeight:1.5}}><span style={{color:"var(--moss)"}}>Set up: </span>{g.setup}</p>
+                    <p style={{margin:"0 0 6px",fontSize:13,lineHeight:1.5,color:"var(--chalk-dim)"}}><span style={{color:"var(--rope)"}}>Count: </span>{g.repCounting}</p>
+                    <p style={{margin:"0 0 6px",fontSize:13,lineHeight:1.5,color:"var(--chalk-dim)"}}><span style={{color:"var(--deload)"}}>Watch: </span>{g.commonMistake}</p>
                   </div>
                 </div>
               )}
             </div>
-          ))}
+          );})}
         </div>
       ))}
     </div>
