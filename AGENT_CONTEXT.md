@@ -8,7 +8,11 @@ The app came from a Claude single-file artifact and has been migrated into a Vit
 
 ## Git State
 
-- Repo path: `C:/Users/jeffc/Ascent`
+- Primary repo URL: `https://github.com/JC27141/Ascent`
+- Known local checkout paths:
+  - `C:/Users/jeffc/Documents/Ascent` - Codex desktop chats may open here by default.
+  - `C:/Users/jeffc/Ascent` - original working copy used during the first implementation.
+- Before starting work, run `git status --short --branch` and `git remote -v` in the current workspace to confirm it is on `origin/main` or an intended feature branch.
 - Default branch: `main`
 - Baseline branch: `master`
 - Previous implementation branch: `codex/pwa-hardening`
