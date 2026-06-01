@@ -11,7 +11,11 @@ The app came from a Claude single-file artifact and has been migrated into a Vit
 - Repo path: `C:/Users/jeffc/Ascent`
 - Baseline branch: `master`
 - Active implementation branch: `codex/pwa-hardening`
-- Remote status: no Git remote is configured at the time this document was written.
+- Remote: `origin` -> `https://github.com/JC27141/Ascent.git`
+- GitHub visibility: public
+- GitHub default branch: `main`
+- Local baseline branch: `master`
+- Local active implementation branch: `codex/pwa-hardening`
 
 Current commit history:
 
@@ -166,4 +170,3 @@ If a remote is added, document:
 - The app is still mostly single-file.
 - Travel blocks currently advise but do not automatically reschedule sessions.
 - Backup JSON is manual export/import, not automatic cloud sync.
-
