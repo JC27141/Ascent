@@ -1656,10 +1656,13 @@ export default function App(){
     applyAppData(data);
     setLoaded(true);
   },[]);
-  // Show completion modal on load if plan is already complete (e.g. after data injection or returning to a finished plan)
+  // Auto-open completion modal once on first load when plan is done.
+  // After dismissal the Today tab banner is the persistent re-entry point.
+  const shownCompletionOnLoad=useRef(false);
   useEffect(()=>{
-    if(!loaded) return;
+    if(!loaded||shownCompletionOnLoad.current) return;
     if(Object.keys(logs).length>0 && isPlanComplete(plan.weeks,logs)){
+      shownCompletionOnLoad.current=true;
       setCompletionModal("celebration");
     }
   },[loaded]);
@@ -1859,31 +1862,51 @@ export default function App(){
             !metrics.some(m=>m.week===w.week) &&
             !dismissedCheckpoints.includes(w.week)
           );
+          const planDone=isPlanComplete(plan.weeks,logs);
           return (
           <div className="stagger">
-            {checkpointWeek&&<CheckpointPrompt week={checkpointWeek}
-              onSave={entry=>setMetrics(m=>[...m.filter(x=>x.week!==entry.week),entry].sort((a,b)=>a.week-b.week))}
-              onDismiss={()=>setDismissedCheckpoints(d=>[...d,checkpointWeek.week])}/>}
-            <div className="card" style={{padding:15,marginBottom:14,borderColor:schedState.due.length?"var(--rope)":schedState.overdue.length?"var(--deload)":"var(--line)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,marginBottom:9}}>
-                <div className="disp" style={{fontSize:15,color:"var(--rope)"}}>Today</div>
-                <button className="btn btn-ghost" style={{padding:"5px 9px",fontSize:12}} onClick={()=>setManage(true)}>Schedule</button>
-              </div>
-              <div style={{fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>
-                {schedState.due.length>0 ? (
-                  <>Due now: {schedState.due.map(i=>`W${i.week} ${sessionTitle(i.session)}`).join(", ")}.</>
-                ) : schedState.overdue.length>0 ? (
-                  <>Overdue: {schedState.overdue.slice(0,2).map(i=>`W${i.week} ${sessionTitle(i.session)} (${fmtFullDate(i.date)})`).join(", ")}.</>
-                ) : schedState.upcoming ? (
-                  <>Next up: W{schedState.upcoming.week} {sessionTitle(schedState.upcoming.session)} on {fmtFullDate(schedState.upcoming.date)}.</>
-                ) : <>All scheduled sessions are logged.</>}
-              </div>
-              {travelToday && (
-                <div style={{marginTop:10,padding:"9px 10px",borderRadius:10,background:"var(--granite)",border:"1px solid var(--deload)",fontSize:13,color:"var(--chalk-dim)"}}>
-                  {travelToday.label || "Travel block"} is active today. Treat this as a prompt to go lighter, slide sessions, or use deload-style climbing.
+            {planDone ? (
+              <div className="card fadein" style={{padding:18,marginBottom:14,borderColor:"var(--moss)",background:"linear-gradient(135deg,var(--surface),var(--granite2))"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:"var(--moss)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <Award size={20} color="#1a120c"/>
+                  </div>
+                  <div>
+                    <div className="disp" style={{fontSize:16,fontWeight:800,lineHeight:1.2}}>{plan.name} — complete</div>
+                    <div style={{fontSize:12,color:"var(--chalk-dim)",marginTop:2}}>Time to pick your next plan.</div>
+                  </div>
                 </div>
-              )}
-            </div>
+                <button className="btn btn-rope" style={{width:"100%",padding:11,fontSize:14}} onClick={()=>setCompletionModal("celebration")}>
+                  View results &amp; start next plan
+                </button>
+              </div>
+            ) : (
+              <>
+                {checkpointWeek&&<CheckpointPrompt week={checkpointWeek}
+                  onSave={entry=>setMetrics(m=>[...m.filter(x=>x.week!==entry.week),entry].sort((a,b)=>a.week-b.week))}
+                  onDismiss={()=>setDismissedCheckpoints(d=>[...d,checkpointWeek.week])}/>}
+                <div className="card" style={{padding:15,marginBottom:14,borderColor:schedState.due.length?"var(--rope)":schedState.overdue.length?"var(--deload)":"var(--line)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,marginBottom:9}}>
+                    <div className="disp" style={{fontSize:15,color:"var(--rope)"}}>Today</div>
+                    <button className="btn btn-ghost" style={{padding:"5px 9px",fontSize:12}} onClick={()=>setManage(true)}>Schedule</button>
+                  </div>
+                  <div style={{fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>
+                    {schedState.due.length>0 ? (
+                      <>Due now: {schedState.due.map(i=>`W${i.week} ${sessionTitle(i.session)}`).join(", ")}.</>
+                    ) : schedState.overdue.length>0 ? (
+                      <>Overdue: {schedState.overdue.slice(0,2).map(i=>`W${i.week} ${sessionTitle(i.session)} (${fmtFullDate(i.date)})`).join(", ")}.</>
+                    ) : schedState.upcoming ? (
+                      <>Next up: W{schedState.upcoming.week} {sessionTitle(schedState.upcoming.session)} on {fmtFullDate(schedState.upcoming.date)}.</>
+                    ) : <>All scheduled sessions are logged.</>}
+                  </div>
+                  {travelToday && (
+                    <div style={{marginTop:10,padding:"9px 10px",borderRadius:10,background:"var(--granite)",border:"1px solid var(--deload)",fontSize:13,color:"var(--chalk-dim)"}}>
+                      {travelToday.label || "Travel block"} is active today. Treat this as a prompt to go lighter, slide sessions, or use deload-style climbing.
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
             {/* WEEK HERO */}
             <div className="card" style={{padding:0,marginBottom:14,overflow:"hidden"}}>
               <div style={{padding:"16px 16px 15px",borderLeft:`4px solid ${accent}`}}>
