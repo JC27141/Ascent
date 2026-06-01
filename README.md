@@ -24,7 +24,7 @@ The app still runs locally without those values, but it will stay local-only unt
 ## Supabase Setup
 
 1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the Supabase SQL editor.
+2. Run `supabase/schema.sql` in the Supabase SQL editor. This also enables Supabase Realtime on the `app_state` table so edits on one device appear on another instantly. Existing projects must re-run the script once to pick up realtime.
 3. Create or invite the single user account that should access the trainer, and disable public signup if the project will be reachable from the public internet.
 4. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env.local` and to Vercel.
 
