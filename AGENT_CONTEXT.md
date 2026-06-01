@@ -22,6 +22,11 @@ The app came from a Claude single-file artifact and has been migrated into a Vit
 - Local default branch: `main`
 - Local baseline branch: `master`
 - Historical implementation branch: `codex/pwa-hardening`
+- Vercel project: `flurt-s-projects/ascent-trainer`
+- Vercel project ID: `prj_JyKj4QBX4SXcXRjVfrGMO1rz95p6`
+- Vercel Git connection: `https://github.com/JC27141/Ascent`
+- Vercel production URL: `https://ascent-trainer.vercel.app`
+- Vercel env status: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured for Production and Development. Preview env vars still need a non-production Git branch or dashboard setup.
 
 New feature branches should be created from `main`.
 
@@ -53,6 +58,8 @@ The original files are retained as baseline/reference artifacts. New app work sh
 - Main UI: currently concentrated in `src/App.jsx`
 - Icons: `lucide-react`
 - PWA tooling: `vite-plugin-pwa`
+- Cloud sync: Supabase Auth + Postgres through `@supabase/supabase-js`
+- Deployment target: Vercel static Vite deployment with branch/PR preview URLs
 - App icon: `public/icon.svg`
 - Production build output: `dist/`
 
@@ -60,11 +67,12 @@ The app is still mostly single-file. That is acceptable for the current small co
 
 ## Data And Persistence
 
-Persistence uses browser `localStorage`.
+Persistence uses browser `localStorage` as the offline cache and Supabase as the authenticated cloud source when configured.
 
 - Current storage key: `ascent_app_data_v1`
-- Current `schemaVersion`: `1`
+- Current `schemaVersion`: `2`
 - Stored fields:
+  - `updatedAt`
   - `plan`
   - `logs`
   - `metrics`
@@ -74,8 +82,19 @@ Persistence uses browser `localStorage`.
 - Schedule shape:
   - `startDate`
   - `preferredSessionDays`
-  - `travelBlocks`
-- Session logs retain the existing session fields and may include `volumeByGrade`.
+  - `travelBlocks` (shown as Blockers in the calendar UI)
+  - `sessionOverrides` keyed by `week-sessionId` for manually shifted sessions
+- Session logs retain the existing session fields and may include `volumeByGrade` and `attemptsByGrade`.
+- Supabase table: `public.app_state`
+  - `user_id uuid primary key`
+  - `data jsonb not null`
+  - `schema_version int not null`
+  - `updated_at timestamptz not null`
+- Row Level Security must stay enabled. Authenticated users may only select, insert, and update rows where `auth.uid() = user_id`.
+- On sign-in, the app compares local and cloud `updatedAt` values and keeps the newest app payload.
+- Local changes save immediately to `localStorage` and debounce an upsert to Supabase when online.
+- Offline changes remain usable locally and sync on the browser `online` event.
+- The app offers sign-in only. Create or invite the single allowed account in Supabase and disable public signup for a private deployment.
 - Legacy migration reads these old keys if the new app data key does not exist:
   - `ct_plan`
   - `ct_logs`
@@ -84,7 +103,7 @@ Persistence uses browser `localStorage`.
 
 Backup/import behavior:
 
-- Full export includes plan, logs, metrics, sends, schedule, settings, schema version, and export timestamp.
+- Full export includes plan, logs, metrics, sends, schedule, settings, schema version, `updatedAt`, and export timestamp.
 - Legacy plan-only JSON imports are supported and should not erase logs, metrics, sends, schedule, or settings.
 - Import/migration must not overwrite user training history unless validation succeeds.
 - Personal exported backup JSON files are ignored by `.gitignore` and should not be committed unless the user explicitly asks.
@@ -95,8 +114,10 @@ If `schemaVersion` changes, update this document in the same commit or an adjace
 
 - The training philosophy is movement-first and injury-aware.
 - Pain flags are advisory only. The app should surface guidance such as going lighter or considering a deload, but it should not silently rewrite the plan.
-- Travel/deload blocks are configurable and currently advisory.
-- Per-session climbing volume feeds the global pyramid.
+- Travel/deload blocks are configurable as calendar Blockers. They warn on conflicts and prompt manual shifting, but they do not automatically reschedule sessions.
+- Per-session climbing volume feeds the global pyramid and calendar effort intensity.
+- Failed/project attempts are logged by grade in `attemptsByGrade`; they appear as separate projecting markers and do not contribute to effort intensity.
+- Calendar effort uses sends and RPE for logged climbing days, RPE for support work, and a simple planned estimate for future days.
 - Manual pyramid adjustment remains available for corrections.
 - Export/import protects user training history.
 - Git protects app source and default artifacts.
@@ -135,15 +156,38 @@ Expected local dev URL:
 http://127.0.0.1:5173/
 ```
 
+Cloud sync environment variables:
+
+```text
+VITE_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY
+```
+
+Deployment:
+
+- Vercel should deploy production from `main`.
+- Vercel preview deploys should be used for branch/PR phone testing.
+- Add the same Supabase environment variables to Vercel production and preview environments.
+- Run `supabase/schema.sql` in the Supabase project before using the deployed app.
+- Local `.vercel/` link metadata is ignored by Git.
+- Latest manual production deploy was aliased to `https://ascent-trainer.vercel.app`.
+
 Verification checklist:
 
 - `npm run build` passes.
 - App opens at the local dev URL.
 - Session logs persist after refresh.
+- Calendar month and selected-day agenda render scheduled workouts, blockers, conflicts, shifted sessions, effort intensity, and projecting markers.
+- Blockers can be added, edited, and deleted without editing raw JSON.
+- Conflicted unlogged sessions can be shifted manually and reset to the original plan date.
 - Full backup export contains all app data.
 - Legacy plan-only import preserves history.
-- Per-session volume updates the global pyramid without double-counting edited sessions.
+- Per-session volume updates the global pyramid without double-counting edited sessions, and failed attempts persist separately by grade.
 - Production build generates `dist/manifest.webmanifest` and `dist/sw.js`.
+- Signed-out users see the login screen when Supabase environment variables are present.
+- Signed-in users can sync data between desktop and phone.
+- Offline edits persist locally and sync after reconnect.
+- Supabase RLS blocks access to any other user's `app_state` row.
 
 ## Maintenance Protocol
 
@@ -176,5 +220,5 @@ If a remote is added, document:
 - No automated tests exist yet.
 - Persistence is `localStorage`, not IndexedDB.
 - The app is still mostly single-file.
-- Travel blocks currently advise but do not automatically reschedule sessions.
-- Backup JSON is manual export/import, not automatic cloud sync.
+- Blockers currently advise and offer manual shift prompts; they do not automatically reschedule sessions.
+- Cloud conflict resolution is app-level last-write-wins by `updatedAt`; per-record merge can be added later if needed.

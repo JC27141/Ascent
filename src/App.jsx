@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Check, X, Lock, Play, Pause, RotateCcw, ChevronLeft, ChevronRight,
   Plus, AlertTriangle, Settings, Upload, Download, Pencil, Mountain,
-  Activity, Flame, Footprints, Dumbbell, Hand, Wind, RefreshCw, Info
+  Activity, Flame, Footprints, Dumbbell, Hand, Wind, RefreshCw, Info,
+  CalendarDays, Trash2, MoveRight, LogOut, Wifi, WifiOff
 } from "lucide-react";
+import { isCloudConfigured, supabase } from "./supabaseClient.js";
 
 /* ============================ THEME ============================ */
 const STYLE = `
@@ -183,7 +185,7 @@ const ROUTINES = {
 
 /* ============================ DRILL DETAIL + SENDS ============================ */
 const DEFAULT_SENDS = { 0:8, 1:12, 2:9, 3:3, 4:0 };
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const APP_DATA_KEY = "ascent_app_data_v1";
 const SESSION_IDS = ["climb1", "climb2", "climb3", "support"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -191,6 +193,7 @@ const DEFAULT_SCHEDULE = {
   startDate: "",
   preferredSessionDays: { climb1:1, climb2:3, climb3:5, support:6 },
   travelBlocks: [],
+  sessionOverrides: {},
 };
 const DEFAULT_SETTINGS = { };
 
@@ -355,8 +358,10 @@ const writeJson = (k, v) => {
   if (!canUseStorage()) return;
   window.localStorage.setItem(k, JSON.stringify(v));
 };
+const nowIso = () => new Date().toISOString();
 const makeDefaultAppData = () => ({
   schemaVersion: SCHEMA_VERSION,
+  updatedAt: nowIso(),
   plan: DEFAULT_PLAN,
   logs: {},
   metrics: [],
@@ -364,14 +369,27 @@ const makeDefaultAppData = () => ({
   schedule: { ...DEFAULT_SCHEDULE, startDate: today() },
   settings: DEFAULT_SETTINGS,
 });
+function normalizeLog(log){
+  if(!log || typeof log!=="object") return log;
+  return {
+    ...log,
+    volumeByGrade: log.volumeByGrade && typeof log.volumeByGrade==="object" ? log.volumeByGrade : {},
+    attemptsByGrade: log.attemptsByGrade && typeof log.attemptsByGrade==="object" ? log.attemptsByGrade : {},
+  };
+}
+function normalizeLogs(logs){
+  if(!logs || typeof logs!=="object") return {};
+  return Object.fromEntries(Object.entries(logs).map(([k,v])=>[k,normalizeLog(v)]));
+}
 function normalizeAppData(raw){
   const base=makeDefaultAppData();
   return {
     ...base,
     ...(raw||{}),
     schemaVersion: SCHEMA_VERSION,
+    updatedAt: raw?.updatedAt || raw?.exportedAt || base.updatedAt,
     plan: raw?.plan?.weeks ? raw.plan : base.plan,
-    logs: raw?.logs && typeof raw.logs==="object" ? raw.logs : base.logs,
+    logs: normalizeLogs(raw?.logs),
     metrics: Array.isArray(raw?.metrics) ? raw.metrics : base.metrics,
     sends: raw?.sends && typeof raw.sends==="object" ? raw.sends : base.sends,
     schedule: {
@@ -382,6 +400,7 @@ function normalizeAppData(raw){
         ...(raw?.schedule?.preferredSessionDays||{}),
       },
       travelBlocks: Array.isArray(raw?.schedule?.travelBlocks) ? raw.schedule.travelBlocks : [],
+      sessionOverrides: raw?.schedule?.sessionOverrides && typeof raw.schedule.sessionOverrides==="object" ? raw.schedule.sessionOverrides : {},
     },
     settings: { ...base.settings, ...(raw?.settings||{}) },
   };
@@ -399,7 +418,12 @@ function loadAppData(){
   writeJson(APP_DATA_KEY, migrated);
   return migrated;
 }
-function saveAppData(next){ writeJson(APP_DATA_KEY, normalizeAppData(next)); }
+function saveAppData(next, opts={}){
+  const normalized=normalizeAppData(next);
+  const stamped=opts.touch===false ? normalized : { ...normalized, updatedAt:nowIso() };
+  writeJson(APP_DATA_KEY, stamped);
+  return stamped;
+}
 function exportBackup(data){ return JSON.stringify({ ...normalizeAppData(data), exportedAt:new Date().toISOString() }, null, 2); }
 function importBackup(json, current){
   const parsed=JSON.parse(json);
@@ -408,6 +432,12 @@ function importBackup(json, current){
   }
   if(!parsed?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
   return { ok:true, data:normalizeAppData({ ...current, ...parsed }) };
+}
+function newestAppData(local, remote){
+  if(!remote) return normalizeAppData(local);
+  const l=normalizeAppData(local);
+  const r=normalizeAppData(remote);
+  return new Date(r.updatedAt) > new Date(l.updatedAt) ? r : l;
 }
 
 /* ============================ HELPERS ============================ */
@@ -422,15 +452,24 @@ const addDays = (date, days) => {
   d.setDate(d.getDate()+days);
   return d.toISOString().slice(0,10);
 };
-const scheduledDate = (schedule, weekNum, sid) => addDays(schedule.startDate || today(), (weekNum-1)*7 + +(schedule.preferredSessionDays?.[sid] ?? 0));
+const monthKey = (date) => date.slice(0,7);
+const monthStart = (date) => `${monthKey(date)}-01`;
+const daysBetween = (start, end) => Math.round((new Date(`${end}T12:00:00`)-new Date(`${start}T12:00:00`))/86400000);
+const plannedDate = (schedule, weekNum, sid) => addDays(schedule.startDate || today(), (weekNum-1)*7 + +(schedule.preferredSessionDays?.[sid] ?? 0));
+const scheduledDate = (schedule, weekNum, sid) => schedule.sessionOverrides?.[logKey(weekNum,sid)] || plannedDate(schedule, weekNum, sid);
 const sessionTitle = (s) => s?.day || "Session";
 function activeTravelBlock(schedule, date){
   return (schedule.travelBlocks||[]).find(b=>b.startDate && b.endDate && date>=b.startDate && date<=b.endDate);
 }
+function travelBlocksOnDate(schedule, date){
+  return (schedule.travelBlocks||[]).filter(b=>b.startDate && b.endDate && date>=b.startDate && date<=b.endDate);
+}
 function scheduleItems(plan, schedule, logs){
   return plan.weeks.flatMap(w=>w.sessions.map(s=>{
+    const key=logKey(w.week,s.id);
     const date=scheduledDate(schedule,w.week,s.id);
-    return { week:w.week, phase:w.phase, type:w.type, session:s, date, log:logs[logKey(w.week,s.id)], travel:activeTravelBlock(schedule,date) };
+    const planDate=plannedDate(schedule,w.week,s.id);
+    return { key, week:w.week, phase:w.phase, type:w.type, session:s, date, planDate, shifted:date!==planDate, log:logs[key], travel:activeTravelBlock(schedule,date) };
   })).sort((a,b)=>a.date.localeCompare(b.date));
 }
 function currentScheduleState(plan, schedule, logs){
@@ -452,6 +491,38 @@ function addSendMaps(...maps){
 function sendsFromLogs(logs){
   const out={};
   Object.values(logs).forEach(l=>Object.entries(l.volumeByGrade||{}).forEach(([g,n])=>{ out[g]=(out[g]||0)+(+n||0); }));
+  return out;
+}
+function volumeScore(volumeByGrade){
+  return Object.entries(volumeByGrade||{}).reduce((sum,[g,n])=>sum+(+n||0)*(+g+1),0);
+}
+function logEffort(log, session){
+  if(!log || log.status==="skip") return null;
+  if(session?.id==="support") return (+log.rpe||0)*2;
+  return volumeScore(log.volumeByGrade)*(+(log.rpe||6)/6);
+}
+function plannedEffort(item){
+  const routineLoad=(item.session.routines?.length||0)*2;
+  const climbBase=item.session.id==="support" ? 8 : item.week>=9 ? 22 : item.week>=5 ? 18 : 14;
+  const typeMod=item.type==="deload" ? .55 : item.type==="test" ? 1.15 : 1;
+  return Math.round((climbBase+routineLoad)*typeMod);
+}
+function itemEffort(item){
+  const logged=logEffort(item.log,item.session);
+  return { value: logged ?? plannedEffort(item), logged: logged!=null };
+}
+function attemptStats(log){
+  const entries=Object.entries(log?.attemptsByGrade||{}).map(([g,n])=>[+g,+n||0]).filter(([,n])=>n>0);
+  if(!entries.length) return { count:0, hardest:null };
+  return { count:entries.reduce((sum,[,n])=>sum+n,0), hardest:Math.max(...entries.map(([g])=>g)) };
+}
+function nextUnblockedDates(schedule, fromDate, count=3){
+  const out=[];
+  let cursor=fromDate;
+  for(let i=0; i<60 && out.length<count; i++){
+    cursor=addDays(cursor,1);
+    if(!activeTravelBlock(schedule,cursor)) out.push(cursor);
+  }
   return out;
 }
 
@@ -529,13 +600,15 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
   const [notes,setNotes]=useState(existingLog?.notes || "");
   const [rd,setRd]=useState(existingLog?.routinesDone || sessionRoutines); // routines done
   const [volume,setVolume]=useState(existingLog?.volumeByGrade || {});
+  const [attempts,setAttempts]=useState(existingLog?.attemptsByGrade || {});
   const [d,setD]=useState(null);
   const step=steps[i];
   const last=i===steps.length-1;
   const toggleR=(r)=>setRd(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
 
-  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:today(),volumeByGrade:volume}); };
+  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:today(),volumeByGrade:volume,attemptsByGrade:attempts}); };
   const bumpVolume=(g,delta)=>setVolume(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
+  const bumpAttempts=(g,delta)=>setAttempts(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
 
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:50,overflowY:"auto"}}>
@@ -668,6 +741,25 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
                   ))}
                 </div>
               )}
+              {session.id!=="support" && (
+                <div className="card" style={{padding:12,marginBottom:16,background:"var(--granite)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
+                    <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0}}>Attempts / projects</div>
+                    <div style={{fontSize:11,color:"var(--faint)"}}>separate calendar marker</div>
+                  </div>
+                  {[0,1,2,3,4,5].map(g=>(
+                    <div key={g} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                      <button onClick={()=>bumpAttempts(g,-1)} style={{width:28,height:28,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--faint)",cursor:"pointer",fontSize:17,lineHeight:1}}>â€“</button>
+                      <div className="disp mono" style={{width:36,textAlign:"center",fontSize:13,color:"var(--chalk-dim)"}}>V{g}</div>
+                      <div style={{flex:1,height:8,background:"var(--surface2)",borderRadius:8,overflow:"hidden"}}>
+                        <div style={{width:`${Math.min(100,(+attempts[g]||0)*12)}%`,height:"100%",background:"var(--test)",borderRadius:8}}/>
+                      </div>
+                      <div className="mono" style={{width:24,textAlign:"right",fontSize:13,color:"var(--chalk)"}}>{+attempts[g]||0}</div>
+                      <button onClick={()=>bumpAttempts(g,1)} style={{width:28,height:28,borderRadius:7,border:"1px solid var(--test)",background:"transparent",color:"var(--test)",cursor:"pointer",fontSize:17,lineHeight:1}}>+</button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <button className="btn" style={{width:"100%",padding:"12px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
                 background:pain?"var(--rope-soft)":"var(--surface)",color:"var(--chalk)",border:`1px solid ${pain?"var(--rope)":"var(--line)"}`}}
                 onClick={()=>setPain(p=>!p)}>
@@ -697,6 +789,266 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
   );
 }
 
+/* ============================ CALENDAR ============================ */
+function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
+  const [selected,setSelected]=useState(today());
+  const [viewMonth,setViewMonth]=useState(monthStart(today()));
+  const [showBlockForm,setShowBlockForm]=useState(false);
+  const [editingBlock,setEditingBlock]=useState(null);
+  const [blockForm,setBlockForm]=useState({label:"",startDate:today(),endDate:today(),notes:""});
+  const [shiftDraft,setShiftDraft]=useState({});
+  const items=scheduleItems(plan,schedule,logs);
+  const monthItems=items.filter(i=>monthKey(i.date)===monthKey(viewMonth));
+  const monthEffortByDate=monthItems.reduce((acc,i)=>{
+    const effort=itemEffort(i).value;
+    acc[i.date]=(acc[i.date]||0)+effort;
+    return acc;
+  },{});
+  const maxEffort=Math.max(1,...Object.values(monthEffortByDate));
+  const selectedItems=items.filter(i=>i.date===selected);
+  const selectedBlocks=travelBlocksOnDate(schedule,selected);
+  const upcomingOpen=items.filter(i=>i.date>=selected && (!i.log || i.log.status==="skip")).slice(0,3);
+  const first=new Date(`${viewMonth}T12:00:00`);
+  const gridStart=addDays(viewMonth,-first.getDay());
+  const days=Array.from({length:42},(_,i)=>addDays(gridStart,i));
+
+  const shiftSession=(key,date)=>{
+    setSchedule(s=>({...s,sessionOverrides:{...(s.sessionOverrides||{}),[key]:date}}));
+  };
+  const resetSession=(key)=>{
+    setSchedule(s=>{
+      const next={...(s.sessionOverrides||{})};
+      delete next[key];
+      return {...s,sessionOverrides:next};
+    });
+  };
+  const editBlock=(block,index)=>{
+    setEditingBlock(index);
+    setShowBlockForm(true);
+    setBlockForm({ label:block.label||"", startDate:block.startDate||selected, endDate:block.endDate||block.startDate||selected, notes:block.notes||"" });
+  };
+  const newBlock=()=>{
+    setShowBlockForm(true);
+    setEditingBlock(null);
+    setBlockForm({label:"",startDate:selected,endDate:selected,notes:""});
+  };
+  const closeBlockForm=()=>{
+    setShowBlockForm(false);
+    setEditingBlock(null);
+    setBlockForm({label:"",startDate:selected,endDate:selected,notes:""});
+  };
+  const saveBlock=()=>{
+    const start=blockForm.startDate || selected;
+    const end=blockForm.endDate || start;
+    const block={label:blockForm.label||"Blocker",startDate:start,endDate:end<start?start:end,notes:blockForm.notes||""};
+    setSchedule(s=>{
+      const blocks=[...(s.travelBlocks||[])];
+      if(editingBlock==null) blocks.push(block);
+      else blocks[editingBlock]=block;
+      return {...s,travelBlocks:blocks};
+    });
+    closeBlockForm();
+  };
+  const deleteBlock=(index)=>{
+    setSchedule(s=>({...s,travelBlocks:(s.travelBlocks||[]).filter((_,i)=>i!==index)}));
+    closeBlockForm();
+  };
+  const monthLabel=new Date(`${viewMonth}T12:00:00`).toLocaleDateString(undefined,{month:"long",year:"numeric"});
+  const fmtDay=(date)=>new Date(`${date}T12:00:00`).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+
+  return (
+    <div className="stagger">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}>
+        <div>
+          <h2 className="disp" style={{fontSize:22,margin:"0 0 3px"}}>Calendar</h2>
+          <div style={{fontSize:12,color:"var(--faint)"}}>Workouts, blockers, effort, and projecting at a glance.</div>
+        </div>
+        <button className="btn btn-rope" style={{padding:"8px 11px",display:"flex",alignItems:"center",gap:6}} onClick={newBlock}><Plus size={15}/>Blocker</button>
+      </div>
+
+      <div className="card" style={{padding:14,marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:12}}>
+          <button className="btn btn-ghost" style={{padding:8}} onClick={()=>setViewMonth(monthStart(addDays(viewMonth,-1)))}><ChevronLeft size={17}/></button>
+          <button className="btn btn-ghost" style={{padding:"8px 12px"}} onClick={()=>{setSelected(today());setViewMonth(monthStart(today()));}}>{monthLabel}</button>
+          <button className="btn btn-ghost" style={{padding:8}} onClick={()=>setViewMonth(monthStart(addDays(viewMonth,32)))}><ChevronRight size={17}/></button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:6}}>
+          {WEEKDAYS.map(d=><div key={d} className="disp" style={{fontSize:10,color:"var(--faint)",textAlign:"center"}}>{d}</div>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5}}>
+          {days.map(date=>{
+            const dayItems=items.filter(i=>i.date===date);
+            const blocks=travelBlocksOnDate(schedule,date);
+            const conflicts=dayItems.some(i=>i.travel && (!i.log || i.log.status==="skip"));
+            const attempts=dayItems.reduce((sum,i)=>sum+attemptStats(i.log).count,0);
+            const effort=monthEffortByDate[date]||0;
+            const effortPct=Math.min(1,effort/maxEffort);
+            const inMonth=monthKey(date)===monthKey(viewMonth);
+            const selectedDay=date===selected;
+            return (
+              <button key={date} onClick={()=>setSelected(date)} style={{minHeight:82,padding:6,textAlign:"left",borderRadius:8,cursor:"pointer",
+                border:`1px solid ${selectedDay?"var(--rope)":conflicts?"var(--deload)":"var(--line)"}`,
+                background:`linear-gradient(180deg, rgba(212,103,58,${effortPct*.28}), rgba(42,34,24,.96))`,
+                opacity:inMonth?1:.42,color:"var(--chalk)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                  <span className="mono" style={{fontSize:11,color:date===today()?"var(--rope)":"var(--chalk-dim)"}}>{date.slice(-2)}</span>
+                  {attempts>0 && <span className="mono" style={{fontSize:9,color:"var(--test)"}}>P{attempts}</span>}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                  {blocks.length>0 && <span style={{height:5,borderRadius:5,background:"var(--deload)"}}/>}
+                  {dayItems.slice(0,2).map(i=>(
+                    <span key={i.key} style={{fontSize:10,lineHeight:1.1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:i.log&&i.log.status!=="skip"?"var(--moss)":"var(--chalk-dim)"}}>
+                      {i.session.id==="support"?"Support":`W${i.week} ${i.session.day.replace("Climb Day ","C")}`}
+                    </span>
+                  ))}
+                  {dayItems.length>2 && <span className="mono" style={{fontSize:9,color:"var(--faint)"}}>+{dayItems.length-2}</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card" style={{padding:14,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginBottom:10}}>
+          <div className="disp" style={{fontSize:16,color:"var(--rope)"}}>{fmtDay(selected)}</div>
+          <div className="mono" style={{fontSize:11,color:"var(--faint)"}}>{selected}</div>
+        </div>
+
+        {selectedBlocks.length>0 && (
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
+            {selectedBlocks.map(block=>{
+              const index=(schedule.travelBlocks||[]).indexOf(block);
+              return (
+                <div key={`${block.startDate}-${block.endDate}-${index}`} style={{border:"1px solid var(--deload)",borderRadius:10,padding:10,background:"var(--granite)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                    <strong className="disp" style={{fontSize:14,color:"var(--deload)"}}>{block.label||"Blocker"}</strong>
+                    <div style={{display:"flex",gap:5}}>
+                      <button className="btn btn-ghost" style={{padding:"4px 7px"}} onClick={()=>editBlock(block,index)}><Pencil size={13}/></button>
+                      <button className="btn btn-ghost" style={{padding:"4px 7px"}} onClick={()=>deleteBlock(index)}><Trash2 size={13}/></button>
+                    </div>
+                  </div>
+                  <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:3}}>{block.startDate} to {block.endDate}</div>
+                  {block.notes && <div style={{fontSize:12,color:"var(--chalk-dim)",marginTop:6}}>{block.notes}</div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {showBlockForm && (
+          <div style={{border:"1px solid var(--line)",borderRadius:10,padding:10,marginBottom:12,background:"var(--granite)"}}>
+            <div className="disp" style={{fontSize:13,color:"var(--rope)",marginBottom:8}}>{editingBlock==null?"Add blocker":"Edit blocker"}</div>
+            <Field label="Label"><input className="tinput" value={blockForm.label} onChange={e=>setBlockForm(f=>({...f,label:e.target.value}))} placeholder="Vacation, work trip, recovery week"/></Field>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}}>
+              <Field label="Start"><input className="tinput" type="date" value={blockForm.startDate} onChange={e=>setBlockForm(f=>({...f,startDate:e.target.value}))}/></Field>
+              <Field label="End"><input className="tinput" type="date" value={blockForm.endDate} onChange={e=>setBlockForm(f=>({...f,endDate:e.target.value}))}/></Field>
+            </div>
+            <Field label="Notes"><input className="tinput" value={blockForm.notes} onChange={e=>setBlockForm(f=>({...f,notes:e.target.value}))} placeholder="Optional"/></Field>
+            <div style={{display:"flex",gap:8,marginTop:9}}>
+              <button className="btn btn-rope" style={{flex:1,padding:10}} onClick={saveBlock}>Save blocker</button>
+              <button className="btn btn-ghost" style={{padding:"10px 12px"}} onClick={closeBlockForm}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {selectedItems.length===0 && selectedBlocks.length===0 && (
+          <div style={{fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5,marginBottom:10}}>No workouts or blockers here.</div>
+        )}
+        {selectedItems.map(i=>{
+          const effort=itemEffort(i);
+          const stats=attemptStats(i.log);
+          const candidates=nextUnblockedDates(schedule,i.date,3);
+          const open=!i.log || i.log.status==="skip";
+          return (
+            <div key={i.key} style={{borderTop:"1px solid var(--line)",padding:"12px 0"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                <div style={{flex:1}}>
+                  <div className="disp" style={{fontSize:14}}>{`W${i.week} ${sessionTitle(i.session)}`}</div>
+                  <div style={{fontSize:12,color:"var(--chalk-dim)",lineHeight:1.45,marginTop:3}}>{i.session.focus}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                    <span className="pill" style={{background:"var(--surface2)",color:effort.logged?"var(--moss)":"var(--chalk-dim)"}}>{effort.logged?"Logged":"Est"} effort {Math.round(effort.value)}</span>
+                    {stats.count>0 && <span className="pill" style={{background:"var(--surface2)",color:"var(--test)"}}>Projecting {stats.count} · max V{stats.hardest}</span>}
+                    {i.shifted && <span className="pill" style={{background:"var(--surface2)",color:"var(--rope)"}}>Shifted from {i.planDate}</span>}
+                  </div>
+                </div>
+                <button className="btn btn-rope" style={{padding:"8px 11px",display:"flex",alignItems:"center",gap:5}} onClick={()=>onOpenSession(i)}>{i.log?"Edit":"Start"}</button>
+              </div>
+              {i.travel && open && (
+                <div style={{marginTop:10,border:"1px solid var(--deload)",borderRadius:10,padding:10,background:"var(--granite)"}}>
+                  <div style={{fontSize:12,color:"var(--deload)",marginBottom:8}}>{i.travel.label||"Blocker"} overlaps this workout. Shift it manually when useful.</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {candidates.map(d=>(
+                      <button key={d} className="btn btn-ghost" style={{padding:"6px 9px",display:"flex",alignItems:"center",gap:5,fontSize:12}} onClick={()=>shiftSession(i.key,d)}><MoveRight size={13}/>{fmtDay(d)}</button>
+                    ))}
+                    <input className="tinput" type="date" value={shiftDraft[i.key]||""} onChange={e=>setShiftDraft(p=>({...p,[i.key]:e.target.value}))} style={{width:138,padding:"5px 7px",fontSize:12}}/>
+                    <button className="btn btn-ghost" style={{padding:"6px 9px",fontSize:12}} onClick={()=>shiftDraft[i.key]&&shiftSession(i.key,shiftDraft[i.key])}>Custom</button>
+                  </div>
+                </div>
+              )}
+              {i.shifted && (
+                <button className="btn btn-ghost" style={{marginTop:8,padding:"6px 9px",fontSize:12}} onClick={()=>resetSession(i.key)}>Reset to plan date</button>
+              )}
+            </div>
+          );
+        })}
+
+        {upcomingOpen.length>0 && (
+          <div style={{borderTop:"1px solid var(--line)",paddingTop:12,marginTop:4}}>
+            <div className="disp" style={{fontSize:13,color:"var(--rope)",marginBottom:7}}>Upcoming open workouts</div>
+            {upcomingOpen.map(i=>(
+              <button key={i.key} onClick={()=>setSelected(i.date)} style={{width:"100%",background:"none",border:"none",padding:"5px 0",display:"flex",justifyContent:"space-between",cursor:"pointer",color:"var(--chalk-dim)",fontSize:12}}>
+                <span>{`W${i.week} ${sessionTitle(i.session)}`}</span><span className="mono">{i.date}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============================ AUTH ============================ */
+function AuthScreen({ email, setEmail, password, setPassword, message, onSubmit }){
+  return (
+    <div className="ct-root" style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
+      <style>{STYLE}</style>
+      <div className="card fadein" style={{position:"relative",zIndex:1,width:"100%",maxWidth:420,padding:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>
+          <div style={{width:38,height:38,borderRadius:10,background:"var(--rope)",display:"flex",alignItems:"center",justifyContent:"center"}}><Mountain size={22} color="#1a120c"/></div>
+          <div>
+            <div className="disp" style={{fontSize:24,fontWeight:800,lineHeight:1}}>Ascent</div>
+            <div style={{fontSize:12,color:"var(--faint)"}}>Private synced trainer</div>
+          </div>
+        </div>
+
+        {!isCloudConfigured && (
+          <div className="card" style={{padding:12,borderColor:"var(--deload)",marginBottom:14,color:"var(--chalk-dim)",fontSize:13,lineHeight:1.45}}>
+            Supabase is not configured yet. Add <span className="mono">VITE_SUPABASE_URL</span> and <span className="mono">VITE_SUPABASE_ANON_KEY</span> to enable phone sync.
+          </div>
+        )}
+
+        <form onSubmit={onSubmit}>
+          <Field label="Email">
+            <input className="tinput" type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required/>
+          </Field>
+          <Field label="Password">
+            <input className="tinput" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={6}/>
+          </Field>
+          <button className="btn btn-rope" type="submit" disabled={!isCloudConfigured} style={{width:"100%",padding:13,marginTop:12,fontSize:16,opacity:isCloudConfigured?1:.55}}>
+            Sign in
+          </button>
+        </form>
+
+        <div style={{fontSize:12,color:"var(--faint)",lineHeight:1.45,marginTop:12}}>
+          Create or invite the account in Supabase first, then sign in here.
+        </div>
+        {message && <div style={{marginTop:12,fontSize:13,color:message.type==="error"?"var(--rope)":"var(--moss)",lineHeight:1.4}}>{message.text}</div>}
+      </div>
+    </div>
+  );
+}
+
 /* ============================ APP ============================ */
 export default function App(){
   const [plan,setPlan]=useState(DEFAULT_PLAN);
@@ -704,7 +1056,14 @@ export default function App(){
   const [metrics,setMetrics]=useState([]);
   const [schedule,setSchedule]=useState({ ...DEFAULT_SCHEDULE, startDate: today() });
   const [settings,setSettings]=useState(DEFAULT_SETTINGS);
+  const [dataUpdatedAt,setDataUpdatedAt]=useState(null);
   const [loaded,setLoaded]=useState(false);
+  const [authReady,setAuthReady]=useState(!isCloudConfigured);
+  const [session,setSession]=useState(null);
+  const [syncStatus,setSyncStatus]=useState(isCloudConfigured?"signed-out":"local");
+  const [authEmail,setAuthEmail]=useState("");
+  const [authPassword,setAuthPassword]=useState("");
+  const [authMessage,setAuthMessage]=useState(null);
   const [tab,setTab]=useState("today");
   const [curWeek,setCurWeek]=useState(1);
   const [runner,setRunner]=useState(null); // {week, session}
@@ -713,21 +1072,115 @@ export default function App(){
   const [sends,setSends]=useState(DEFAULT_SENDS);
   const [drill,setDrill]=useState(null);
   const [routine,setRoutine]=useState(null);
+  const saveTimer=useRef(null);
+  const applyingRemoteRef=useRef(false);
+
+  const currentAppData=()=>({
+    schemaVersion:SCHEMA_VERSION,
+    updatedAt:dataUpdatedAt || nowIso(),
+    plan, logs, metrics, sends, schedule, settings,
+  });
+  const applyAppData=(data)=>{
+    const normalized=normalizeAppData(data);
+    setPlan(normalized.plan); setLogs(normalized.logs); setMetrics(normalized.metrics); setSends(normalized.sends);
+    setSchedule(normalized.schedule); setSettings(normalized.settings); setDataUpdatedAt(normalized.updatedAt);
+    setCurWeek(currentScheduleState(normalized.plan,normalized.schedule,normalized.logs).currentWeek);
+  };
+  const pushCloudData=async(data)=>{
+    if(!isCloudConfigured || !session?.user) return;
+    if(typeof navigator !== "undefined" && !navigator.onLine){ setSyncStatus("offline"); return; }
+    setSyncStatus("syncing");
+    const payload=normalizeAppData(data);
+    const { error }=await supabase.from("app_state").upsert({
+      user_id:session.user.id,
+      data:payload,
+      schema_version:SCHEMA_VERSION,
+      updated_at:payload.updatedAt,
+    }, { onConflict:"user_id" });
+    setSyncStatus(error ? "error" : "synced");
+    if(error) console.error("Supabase sync failed", error);
+  };
+  const queueCloudSave=(data)=>{
+    if(!isCloudConfigured || !session?.user) return;
+    if(saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current=setTimeout(()=>pushCloudData(data), 650);
+  };
 
   useEffect(()=>{
     const data=loadAppData();
-    setPlan(data.plan);
-    setLogs(data.logs);
-    setMetrics(data.metrics);
-    setSends(data.sends);
-    setSchedule(data.schedule);
-    setSettings(data.settings);
-    setCurWeek(currentScheduleState(data.plan,data.schedule,data.logs).currentWeek);
+    applyAppData(data);
     setLoaded(true);
   },[]);
   useEffect(()=>{
-    if(loaded) saveAppData({ schemaVersion:SCHEMA_VERSION, plan, logs, metrics, sends, schedule, settings });
+    if(!isCloudConfigured){
+      setAuthReady(true);
+      setSyncStatus("local");
+      return;
+    }
+    let active=true;
+    supabase.auth.getSession().then(({ data, error })=>{
+      if(!active) return;
+      if(error) setAuthMessage({ type:"error", text:error.message });
+      setSession(data.session);
+      setSyncStatus(data.session?"syncing":"signed-out");
+      setAuthReady(true);
+    });
+    const { data:{ subscription } }=supabase.auth.onAuthStateChange((_event,nextSession)=>{
+      setSession(nextSession);
+      setSyncStatus(nextSession?"syncing":"signed-out");
+    });
+    return ()=>{ active=false; subscription.unsubscribe(); };
+  },[]);
+  useEffect(()=>{
+    if(!loaded || !authReady || !isCloudConfigured) return;
+    if(!session?.user){ setSyncStatus("signed-out"); return; }
+    let active=true;
+    const hydrateFromCloud=async()=>{
+      if(typeof navigator !== "undefined" && !navigator.onLine){ setSyncStatus("offline"); return; }
+      setSyncStatus("syncing");
+      const local=loadAppData();
+      const { data:row, error }=await supabase
+        .from("app_state")
+        .select("data, updated_at")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+      if(!active) return;
+      if(error){ setSyncStatus("error"); console.error("Supabase load failed", error); return; }
+      const remote=row?.data ? normalizeAppData({ ...row.data, updatedAt:row.data.updatedAt || row.updated_at }) : null;
+      if(remote && new Date(remote.updatedAt) > new Date(local.updatedAt)){
+        applyingRemoteRef.current=true;
+        applyAppData(remote);
+        saveAppData(remote,{touch:false});
+        setSyncStatus("synced");
+        return;
+      }
+      await pushCloudData(newestAppData(local, remote));
+    };
+    hydrateFromCloud();
+    return ()=>{ active=false; };
+  },[loaded,authReady,session?.user?.id]);
+  useEffect(()=>{
+    if(!loaded) return;
+    const next=currentAppData();
+    if(applyingRemoteRef.current){
+      saveAppData(next,{touch:false});
+      applyingRemoteRef.current=false;
+      return;
+    }
+    const saved=saveAppData(next);
+    queueCloudSave(saved);
   },[plan,logs,metrics,sends,schedule,settings,loaded]);
+  useEffect(()=>{
+    if(typeof window === "undefined") return;
+    const online=()=>{ if(session?.user) queueCloudSave(loadAppData()); };
+    const offline=()=>setSyncStatus("offline");
+    window.addEventListener("online", online);
+    window.addEventListener("offline", offline);
+    return ()=>{
+      window.removeEventListener("online", online);
+      window.removeEventListener("offline", offline);
+    };
+  },[session?.user?.id]);
 
   const week=plan.weeks.find(w=>w.week===curWeek)||plan.weeks[0];
   const totalSessions=plan.weeks.length*4;
@@ -737,11 +1190,59 @@ export default function App(){
   const schedState=currentScheduleState(plan,schedule,logs);
   const combinedSends=addSendMaps(sends,sendsFromLogs(logs));
 
-  const saveLog=(wk,sid,data)=>{ setLogs(p=>({...p,[logKey(wk,sid)]:data})); setRunner(null); };
-  const replaceAppData=(data)=>{
-    setPlan(data.plan); setLogs(data.logs); setMetrics(data.metrics); setSends(data.sends);
-    setSchedule(data.schedule); setSettings(data.settings); setCurWeek(currentScheduleState(data.plan,data.schedule,data.logs).currentWeek);
+  const saveLog=(wk,sid,data)=>{ setLogs(p=>({...p,[logKey(wk,sid)]:normalizeLog(data)})); setRunner(null); };
+  const openCalendarSession=(item)=>{
+    setCurWeek(item.week);
+    setRunner({week:item.week,session:item.session});
   };
+  const replaceAppData=(data)=>{
+    applyAppData({ ...data, updatedAt:nowIso() });
+  };
+  const handleAuthSubmit=async(e)=>{
+    e.preventDefault();
+    if(!isCloudConfigured) return;
+    setAuthMessage(null);
+    const credentials={ email:authEmail.trim(), password:authPassword };
+    const { error }=await supabase.auth.signInWithPassword(credentials);
+    if(error) setAuthMessage({ type:"error", text:error.message });
+    else {
+      setAuthPassword("");
+      setAuthMessage(null);
+    }
+  };
+  const signOut=async()=>{
+    if(isCloudConfigured) await supabase.auth.signOut();
+    setSession(null);
+    setSyncStatus("signed-out");
+  };
+  const syncLabel={
+    local:"Local only",
+    "signed-out":"Signed out",
+    syncing:"Syncing",
+    synced:"Synced",
+    offline:"Offline",
+    error:"Sync issue",
+  }[syncStatus] || "Sync";
+  const SyncIcon=syncStatus==="offline" || syncStatus==="error" ? WifiOff : Wifi;
+
+  if(!authReady){
+    return (
+      <div className="ct-root" style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <style>{STYLE}</style>
+        <div className="disp" style={{position:"relative",zIndex:1,color:"var(--chalk-dim)"}}>Loading Ascent...</div>
+      </div>
+    );
+  }
+  if(isCloudConfigured && !session){
+    return (
+      <AuthScreen
+        email={authEmail} setEmail={setAuthEmail}
+        password={authPassword} setPassword={setAuthPassword}
+        message={authMessage}
+        onSubmit={handleAuthSubmit}
+      />
+    );
+  }
 
   return (
     <div className="ct-root" style={{minHeight:"100vh"}}>
@@ -759,9 +1260,17 @@ export default function App(){
             <div>
               <div className="disp" style={{fontWeight:800,fontSize:18,lineHeight:1}}>Ascent</div>
               <div style={{fontSize:11,color:"var(--faint)"}}>{plan.name}</div>
+              <div className="mono" style={{fontSize:10,color:syncStatus==="error"?"var(--rope)":syncStatus==="offline"?"var(--deload)":"var(--moss)",display:"flex",alignItems:"center",gap:4,marginTop:3}}>
+                <SyncIcon size={11}/>{syncLabel}
+              </div>
             </div>
           </div>
-          <button className="btn btn-ghost" style={{padding:9}} onClick={()=>setManage(true)}><Settings size={18}/></button>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            {isCloudConfigured && (
+              <button className="btn btn-ghost" title="Sign out" style={{padding:9}} onClick={signOut}><LogOut size={18}/></button>
+            )}
+            <button className="btn btn-ghost" title="Manage plan" style={{padding:9}} onClick={()=>setManage(true)}><Settings size={18}/></button>
+          </div>
         </div>
 
         {/* ===== TODAY ===== */}
@@ -984,6 +1493,9 @@ export default function App(){
           </div>
         )}
 
+        {/* ===== CALENDAR ===== */}
+        {tab==="calendar" && <CalendarView plan={plan} schedule={schedule} setSchedule={setSchedule} logs={logs} onOpenSession={openCalendarSession}/>}
+
         {/* ===== METRICS ===== */}
         {tab==="metrics" && <Metrics metrics={metrics} setMetrics={setMetrics} planLen={plan.weeks.length}/>}
 
@@ -994,15 +1506,15 @@ export default function App(){
       {/* tab bar */}
       <div className="tabbar" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:40}}>
         <div style={{maxWidth:560,margin:"0 auto",display:"flex",justifyContent:"space-around",padding:"10px 8px 14px"}}>
-          {[["today",Flame,"Today"],["plan",Mountain,"Plan"],["metrics",Activity,"Metrics"],["library",Hand,"Library"]].map(([t,Icon,l])=>(
+          {[["today",Flame,"Today"],["calendar",CalendarDays,"Calendar"],["plan",Mountain,"Plan"],["metrics",Activity,"Metrics"],["library",Hand,"Library"]].map(([t,Icon,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:tab===t?"var(--rope)":"var(--faint)"}}>
-              <Icon size={22}/><span className="disp" style={{fontSize:11,fontWeight:700}}>{l}</span>
+              <Icon size={21}/><span className="disp" style={{fontSize:10,fontWeight:700}}>{l}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {manage && <Manage data={{ schemaVersion:SCHEMA_VERSION, plan, logs, metrics, sends, schedule, settings }}
+      {manage && <Manage data={{ schemaVersion:SCHEMA_VERSION, updatedAt:dataUpdatedAt, plan, logs, metrics, sends, schedule, settings }}
         onReplace={replaceAppData} setPlan={setPlan} setSchedule={setSchedule} onClose={()=>setManage(false)}/>}
       {drill && <DrillSheet name={drill} onClose={()=>setDrill(null)}/>}
       {routine && <RoutineSheet rkey={routine} week={curWeek} onClose={()=>setRoutine(null)} onDrill={(n)=>setDrill(n)}/>}

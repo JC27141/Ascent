@@ -2,9 +2,11 @@ node_modules/
 dist/
 .vite/
 .cache/
+.vercel/
 *.local
 *.log
 ascent-backup*.json
 training-backup*.json
 personal-backup*.json
 
+.vercel
