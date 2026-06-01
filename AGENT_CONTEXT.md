@@ -58,7 +58,7 @@ The original files are retained as baseline/reference artifacts. New app work sh
 - Main UI: currently concentrated in `src/App.jsx`
 - Icons: `lucide-react`
 - PWA tooling: `vite-plugin-pwa`
-- Cloud sync: Supabase Auth + Postgres through `@supabase/supabase-js`
+- Cloud sync: Supabase Auth + Postgres through `@supabase/supabase-js`, with Supabase Realtime for instant cross-device updates
 - Deployment target: Vercel static Vite deployment with branch/PR preview URLs
 - App icon: `public/icon.svg`
 - Production build output: `dist/`
@@ -94,6 +94,8 @@ Persistence uses browser `localStorage` as the offline cache and Supabase as the
 - On sign-in, the app compares local and cloud `updatedAt` values and keeps the newest app payload.
 - Local changes save immediately to `localStorage` and debounce an upsert to Supabase when online.
 - Offline changes remain usable locally and sync on the browser `online` event.
+- Live cross-device sync: the app subscribes to Supabase Realtime `postgres_changes` on its own `app_state` row. When another signed-in device writes a newer payload, the change is applied immediately without a reload or reconnect. The realtime handler reuses the same `updatedAt` last-write-wins guard, so a device ignores its own echoed write and any payload not strictly newer than local.
+- Realtime requires `app_state` to be in the `supabase_realtime` publication with `replica identity full`; `supabase/schema.sql` configures this idempotently. RLS still applies to realtime, so a user only ever receives changes to their own row.
 - The app offers sign-in only. Create or invite the single allowed account in Supabase and disable public signup for a private deployment.
 - Legacy migration reads these old keys if the new app data key does not exist:
   - `ct_plan`
@@ -186,6 +188,7 @@ Verification checklist:
 - Production build generates `dist/manifest.webmanifest` and `dist/sw.js`.
 - Signed-out users see the login screen when Supabase environment variables are present.
 - Signed-in users can sync data between desktop and phone.
+- A change saved on one signed-in device appears on another open signed-in device within a second or two, with no reload (requires the realtime publication step in `supabase/schema.sql`).
 - Offline edits persist locally and sync after reconnect.
 - Supabase RLS blocks access to any other user's `app_state` row.
 

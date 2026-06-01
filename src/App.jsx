@@ -1984,6 +1984,34 @@ export default function App(){
       window.removeEventListener("offline", offline);
     };
   },[session?.user?.id]);
+  // Live cross-device sync: subscribe to this user's app_state row so an edit on
+  // one device (e.g. the phone) is applied here the moment it lands in Postgres,
+  // without waiting for a reload or reconnect. Our own writes echo back too, but
+  // the updatedAt comparison skips anything not strictly newer than local.
+  useEffect(()=>{
+    if(!isCloudConfigured || !authReady || !session?.user) return;
+    const userId=session.user.id;
+    const applyRemoteRow=(row)=>{
+      if(!row?.data) return;
+      const remote=normalizeAppData({ ...row.data, updatedAt:row.data.updatedAt || row.updated_at });
+      const local=loadAppData();
+      if(new Date(remote.updatedAt) > new Date(local.updatedAt)){
+        applyingRemoteRef.current=true;
+        applyAppData(remote);
+        saveAppData(remote,{touch:false});
+        setSyncStatus("synced");
+      }
+    };
+    const channel=supabase
+      .channel(`app_state:${userId}`)
+      .on(
+        "postgres_changes",
+        { event:"*", schema:"public", table:"app_state", filter:`user_id=eq.${userId}` },
+        (payload)=>applyRemoteRow(payload.new)
+      )
+      .subscribe();
+    return ()=>{ supabase.removeChannel(channel); };
+  },[authReady,session?.user?.id]);
 
   const week=plan.weeks.find(w=>w.week===curWeek)||plan.weeks[0];
   const totalSessions=plan.weeks.length*4;

@@ -28,3 +28,21 @@ for update
 to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- Realtime: stream row changes to other signed-in devices so edits made on one
+-- device appear instantly on another. RLS above still applies to realtime, so a
+-- user only ever receives changes to their own row.
+alter table public.app_state replica identity full;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'app_state'
+  ) then
+    alter publication supabase_realtime add table public.app_state;
+  end if;
+end $$;
