@@ -3,7 +3,7 @@ import {
   Check, X, Lock, Play, Pause, RotateCcw, ChevronLeft, ChevronRight,
   Plus, AlertTriangle, Settings, Upload, Download, Pencil, Mountain,
   Activity, Flame, Footprints, Dumbbell, Hand, Wind, RefreshCw, Info,
-  CalendarDays, Trash2, MoveRight, LogOut, Wifi, WifiOff
+  CalendarDays, Trash2, MoveRight, LogOut, Wifi, WifiOff, Award, History
 } from "lucide-react";
 import { isCloudConfigured, supabase } from "./supabaseClient.js";
 
@@ -177,6 +177,198 @@ const DEFAULT_PLAN = {
   ],
 };
 
+const INTERMEDIATE_PLAN = {
+  name: "Intermediate 12-Week Progression",
+  idea: "You can flash V3 and are working V4–V5. This block builds volume at your limit, introduces max-strength work in month two, and peaks in a redpoint phase targeting V5. Pull-up intensity and finger prep increase progressively alongside climbing.",
+  weeks: [
+    W(1,"M1 · Volume","normal",
+      {focus:"Volume V3–V4: many attempts, apply route-reading.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine after."},
+      {focus:"Flash practice: on-sight V2–V3 without previewing.",drills:["Silent / precision feet"],routines:["Core"],note:"Core."},
+      {focus:"Projecting: 3–5 serious attempts on a V4.",drills:["Backstep / drop-knee"],routines:["Pull-ups","Shoulder"],note:"Pull-ups 3×(max-1). Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2×",["Shoulder","Pull-ups","Core","Antagonist"]),
+    W(2,"M1 · Volume","normal",
+      {focus:"Volume V3–V4, add dynamic moves.",drills:["Deadpoint / precise catch"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Flash practice V2–V3 + easy downclimbing.",drills:["Downclimbing"],routines:["Core"],note:"Core."},
+      {focus:"Projecting V4: full rests between attempts.",drills:["Route-reading routine"],routines:["Pull-ups","Shoulder"],note:"Pull-ups 3×(max-1). Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle"]),
+    W(3,"M1 · Volume","normal",
+      {focus:"Volume V3–V4: aim for 5+ problems at grade.",drills:["Hip turn + flagging"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Flash practice V3 + route-reading.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Projecting V4–V5: first V5 attempts if ready.",drills:["Backstep / drop-knee"],routines:["Pull-ups","Shoulder"],note:"Pull-ups 3×(max-1). Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle"]),
+    W(4,"M1 · Volume","deload",
+      {focus:"Easy climbing ~40% volume. No limit attempts.",drills:[],routines:[]},
+      {focus:"Easy volume, light footwork drills.",drills:["Silent / precision feet"],routines:[]},
+      {focus:"Light mixed climbing. Shoulder routine only.",drills:[],routines:["Shoulder"]},
+      "Shoulder routine light · 1 easy pull-up set · sleep focus",["Shoulder","Pull-ups"]),
+    W(5,"M2 · Max Strength","normal",
+      {focus:"Projecting V4–V5: structured max-effort sessions.",drills:[],routines:["Fingers"],note:"Foot-supported hangs — big edge, feet on, easy."},
+      {focus:"Flash practice V3. Route-reading L2.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V3–V4 + pull-ups (3 sets, max-1 clean reps).",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle","Fingers"]),
+    W(6,"M2 · Max Strength","normal",
+      {focus:"Projecting V5: 4–6 quality attempts, full rests.",drills:[],routines:["Fingers"],note:"Foot-supported hangs."},
+      {focus:"Flash V3. Visualize before each attempt.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V3–V4 + max pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle","Fingers"]),
+    W(7,"M2 · Max Strength","normal",
+      {focus:"Projecting V5. Trim warm-up; arrive strong.",drills:[],routines:["Fingers"],note:"Foot-supported hangs."},
+      {focus:"On-sight session: flash V3, attempt V4.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V4 + pull-up peak (max-1, reduce rest to 90s).",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle","Fingers"]),
+    W(8,"M2 · Max Strength","deload",
+      {focus:"Easy climbing ~40% volume. No projecting.",drills:[],routines:[]},
+      {focus:"Easy volume, quiet feet.",drills:["Silent / precision feet"],routines:[]},
+      {focus:"Light mixed climbing. Shoulder routine only.",drills:[],routines:["Shoulder"]},
+      "Shoulder routine light · 1 easy pull-up set · sleep focus",["Shoulder","Pull-ups"]),
+    W(9,"M3 · Redpoint","normal",
+      {focus:"Structured V5 redpoint: 4–6 max-quality attempts. Arrive fresh.",drills:[],routines:["Fingers"],note:"Foot-supported hangs."},
+      {focus:"On-sight: flash V3–V4. No previewing.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V4 + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Foot/ankle 2× · Route-reading L3",["Shoulder","Pull-ups","Core","Foot/Ankle","Fingers"]),
+    W(10,"M3 · Redpoint","normal",
+      {focus:"V5 redpoint. Repeat previous sessions' best sequence.",drills:[],routines:["Fingers"],note:"Foot-supported hangs."},
+      {focus:"On-sight V3–V4 + visualization.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V4 + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Foot/Ankle","Fingers"]),
+    W(11,"M3 · Redpoint","normal",
+      {focus:"V5 redpoint: trim easy volume, arrive at your best.",drills:[],routines:["Fingers"],note:"Gentle hangs."},
+      {focus:"On-sight + visualization. Target your tested flash grade.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V4 + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 2× · Core 2× · Shoulder 2–3× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(12,"M3 · Redpoint","test",
+      {focus:"TEST: retest max pull-ups; serious V5 attempt.",drills:[],routines:[]},
+      {focus:"TEST: attempt to flash a V4 on sight.",drills:[],routines:[]},
+      {focus:"Light mixed climbing. Log all results in Metrics.",drills:[],routines:[]},
+      "Mostly rest to arrive fresh · light shoulder routine · reassess next cycle",["Shoulder"]),
+  ],
+};
+
+const MAINTENANCE_PLAN = {
+  name: "Maintenance 8-Week Base",
+  idea: "Life got busy. Two shorter climbing sessions a week keeps nearly all your fitness for 8 weeks while your schedule settles. No projecting beyond your current onsight — the goal is holding what you have so the next full block starts strong.",
+  weeks: [
+    W(1,"M1 · Maintenance","normal",
+      {focus:"Easy climbing V0–V3 only. Quiet feet, enjoy movement.",drills:["Silent / precision feet"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery: easy yoga or light cycling. No hard climbing.",drills:[],routines:[]},
+      {focus:"Light V1–V3 volume + pull-ups (comfortable, not max).",drills:["Hip turn + flagging"],routines:["Pull-ups","Shoulder"],note:"Pull-ups light. Shoulder routine."},
+      "Pull-ups 2× light · Shoulder 2× · Core 1× · easy active recovery",["Shoulder","Pull-ups","Core"]),
+    W(2,"M1 · Maintenance","normal",
+      {focus:"Easy climbing V0–V3. Add some downclimbing.",drills:["Downclimbing"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery: gentle movement, no hard climbing.",drills:[],routines:[]},
+      {focus:"Light V2–V3 volume + pull-ups.",drills:["Straight-arm / resting on skeleton"],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 2× light · Shoulder 2× · Core 1× · active recovery",["Shoulder","Pull-ups","Core"]),
+    W(3,"M1 · Maintenance","normal",
+      {focus:"Easy climbing V0–V3. Focus on footwork precision.",drills:["Blind-foot placement"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery.",drills:[],routines:[]},
+      {focus:"Light V2–V3 volume + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 2× light · Shoulder 2× · Core 1× · Foot/ankle 1×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(4,"M1 · Maintenance","deload",
+      {focus:"Very easy climbing, very low volume. Rest focus.",drills:[],routines:[]},
+      {focus:"Complete rest or gentle walk.",drills:[],routines:[]},
+      {focus:"Light technique climbing V0–V2 only.",drills:["Silent / precision feet"],routines:["Shoulder"]},
+      "Shoulder routine light · rest · sleep focus",["Shoulder"]),
+    W(5,"M2 · Prep-Ramp","normal",
+      {focus:"V2–V4 volume: add a couple of project attempts at your onsight grade.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery or rest.",drills:[],routines:[]},
+      {focus:"V2–V4 volume + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Pull-ups building back. Shoulder routine."},
+      "Pull-ups 2× building · Shoulder 2× · Core 1× · Foot/ankle 1×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(6,"M2 · Prep-Ramp","normal",
+      {focus:"V3–V4 volume + one project attempt.",drills:["Backstep / drop-knee"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery.",drills:[],routines:[]},
+      {focus:"V3–V4 volume + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Pull-ups building. Shoulder routine."},
+      "Pull-ups 2× building · Shoulder 2× · Core 2× · Foot/ankle 1×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(7,"M2 · Prep-Ramp","normal",
+      {focus:"V3–V4 volume, flash practice V2–V3.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Rest.",drills:[],routines:[]},
+      {focus:"V3–V4 volume + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 2–3× · Shoulder 2× · Core 2× · Foot/ankle 1×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(8,"M2 · Prep-Ramp","test",
+      {focus:"MINI-TEST: retest max pull-ups; attempt to flash your current grade.",drills:[],routines:[]},
+      {focus:"Light climbing + note how movement feels vs. 8 weeks ago.",drills:["Silent / precision feet"],routines:[]},
+      {focus:"Log all results in Metrics. Plan next full block.",drills:[],routines:[]},
+      "Rest to arrive fresh for test · light shoulder routine",["Shoulder"]),
+  ],
+};
+
+const INJURY_RETURN_PLAN = {
+  name: "Injury Return 8-Week",
+  idea: "You've had a finger, shoulder, or elbow niggle and it's settling down. Pain-free movement first, load second — grade doesn't matter for the first 4 weeks. If pain is ever above 2/10 during a session, stop and log it. Hangboard remains locked for the full 8 weeks regardless of how things feel.",
+  weeks: [
+    W(1,"M1 · Pain-Free Movement","normal",
+      {focus:"V0–V1 ONLY. Open-hand grip only. Stop at any twinge.",drills:["Silent / precision feet"],routines:["Shoulder"],note:"Shoulder routine + antagonist work."},
+      {focus:"Active recovery: easy walking or yoga. No climbing.",drills:[],routines:["Antagonist"],note:"Antagonist (push-ups, wrist extensors)."},
+      {focus:"V0–V1. Downclimbing practice — slow, controlled.",drills:["Downclimbing"],routines:["Shoulder"],note:"Shoulder routine."},
+      "NO pull-ups · Shoulder 2–3× · Antagonist daily · wrist extensors",["Shoulder","Antagonist"]),
+    W(2,"M1 · Pain-Free Movement","normal",
+      {focus:"V0–V2. Same open-hand rule. Stop at 2/10 pain.",drills:["Straight-arm / resting on skeleton"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery. Antagonist work.",drills:[],routines:["Antagonist"]},
+      {focus:"V0–V2. Footwork focus — load legs, not fingers.",drills:["Hip turn + flagging"],routines:["Shoulder"],note:"Shoulder routine."},
+      "NO pull-ups · Shoulder 2–3× · Antagonist daily · wrist extensors",["Shoulder","Antagonist"]),
+    W(3,"M1 · Pain-Free Movement","normal",
+      {focus:"V0–V2. One V3 attempt on a slopey/juggy problem if pain-free.",drills:["Silent / precision feet"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery. Antagonist work.",drills:[],routines:["Antagonist"]},
+      {focus:"V0–V2 volume. Footwork emphasis.",drills:["Blind-foot placement"],routines:["Shoulder"],note:"Shoulder routine."},
+      "Light scapular hangs ONLY if pain-free · Shoulder 2–3× · Antagonist daily",["Shoulder","Antagonist"]),
+    W(4,"M1 · Pain-Free Movement","deload",
+      {focus:"Very easy V0–V1 only. Extra rest.",drills:[],routines:[]},
+      {focus:"Complete rest or gentle walking.",drills:[],routines:[]},
+      {focus:"Easy V0–V2. Shoulder routine only.",drills:["Silent / precision feet"],routines:["Shoulder"]},
+      "Rest priority · Shoulder routine light · antagonist",["Shoulder","Antagonist"]),
+    W(5,"M2 · Gradual Load","normal",
+      {focus:"V2–V3 volume. One projecting attempt at V3 max.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery + antagonist.",drills:[],routines:["Antagonist"]},
+      {focus:"V2–V3 + foot-assisted active hangs (no pulling).",drills:[],routines:["Pull-ups","Shoulder"],note:"Active hangs only. Shoulder routine."},
+      "Foot-assisted active hangs 3×5 · Shoulder 2–3× · Antagonist 2× · Core 1×",["Shoulder","Pull-ups","Antagonist","Core"]),
+    W(6,"M2 · Gradual Load","normal",
+      {focus:"V2–V3 volume + 1–2 V4 attempts if pain-free.",drills:["Backstep / drop-knee"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery.",drills:[],routines:["Antagonist"]},
+      {focus:"V2–V3 + foot-assisted pull-up eccentrics (2–3 sets of 2).",drills:[],routines:["Pull-ups","Shoulder"],note:"Eccentrics only. Shoulder routine."},
+      "Foot-assisted eccentrics · Shoulder 2–3× · Antagonist 2× · Core 1×",["Shoulder","Pull-ups","Antagonist","Core"]),
+    W(7,"M2 · Gradual Load","normal",
+      {focus:"V3 volume + 1–2 V4 project attempts.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery + antagonist.",drills:[],routines:["Antagonist"]},
+      {focus:"V2–V3 + 1–2 unassisted pull-ups if pain-free.",drills:[],routines:["Pull-ups","Shoulder"],note:"1–2 pull-ups max. Shoulder routine."},
+      "Light pull-ups (2–3 max) · Shoulder 2–3× · Antagonist 2× · Core 1×",["Shoulder","Pull-ups","Antagonist","Core"]),
+    W(8,"M2 · Gradual Load","test",
+      {focus:"ASSESSMENT: highest pain-free grade; 2–3 pull-up attempts.",drills:[],routines:[]},
+      {focus:"Easy V0–V2. How does everything feel?",drills:["Silent / precision feet"],routines:[]},
+      {focus:"Log everything in Metrics. Decide: Foundation plan or extend maintenance.",drills:[],routines:[]},
+      "Log results · rest · choose next plan",["Shoulder"]),
+  ],
+};
+
+const PLAN_TEMPLATES = {
+  "foundation-12wk": {
+    id:"foundation-12wk", name:"Foundation 12-Week",
+    subtitle:"V0–V3 skill base, injury prep, pull-up ramp",
+    level:"beginner", targetGrades:"V0–V3",
+    phases:["M1 · Foundation (wk 1–4)","M2 · Skill Under Load (wk 5–8)","M3 · Performance (wk 9–12)"],
+    plan:DEFAULT_PLAN,
+  },
+  "intermediate-12wk": {
+    id:"intermediate-12wk", name:"Intermediate Progression",
+    subtitle:"V3–V5 volume, max strength phase, redpoint block",
+    level:"intermediate", targetGrades:"V3–V5",
+    phases:["M1 · Volume (wk 1–4)","M2 · Max Strength (wk 5–8)","M3 · Redpoint (wk 9–12)"],
+    plan:INTERMEDIATE_PLAN,
+  },
+  "maintenance-8wk": {
+    id:"maintenance-8wk", name:"Maintenance 8-Week",
+    subtitle:"Hold fitness during a busy period, ramp back in week 5",
+    level:"beginner", targetGrades:"Any",
+    phases:["M1 · Maintenance (wk 1–4)","M2 · Prep-Ramp (wk 5–8)"],
+    plan:MAINTENANCE_PLAN,
+  },
+  "injury-return-8wk": {
+    id:"injury-return-8wk", name:"Injury Return 8-Week",
+    subtitle:"Gentle return after a finger, shoulder, or elbow niggle",
+    level:"beginner", targetGrades:"V0–V2",
+    phases:["M1 · Pain-Free Movement (wk 1–4)","M2 · Gradual Load (wk 5–8)"],
+    plan:INJURY_RETURN_PLAN,
+  },
+};
+
 const ROUTINES = {
   "Shoulder":{label:"Shoulder routine",cat:"Shoulder"},
   "Pull-ups":{label:"Pull-ups",cat:"Pull-ups"},
@@ -188,7 +380,7 @@ const ROUTINES = {
 
 /* ============================ DRILL DETAIL + SENDS ============================ */
 const DEFAULT_SENDS = { 0:8, 1:12, 2:9, 3:3, 4:0 };
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const APP_DATA_KEY = "ascent_app_data_v1";
 const SESSION_IDS = ["climb1", "climb2", "climb3", "support"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -365,13 +557,43 @@ const nowIso = () => new Date().toISOString();
 const makeDefaultAppData = () => ({
   schemaVersion: SCHEMA_VERSION,
   updatedAt: nowIso(),
-  plan: DEFAULT_PLAN,
-  logs: {},
-  metrics: [],
+  activeCycle: {
+    cycleId: `cycle_${Date.now()}`,
+    cycleNumber: 1,
+    planTemplateId: "foundation-12wk",
+    plan: DEFAULT_PLAN,
+    logs: {},
+    metrics: [],
+    schedule: { ...DEFAULT_SCHEDULE, startDate: today() },
+    startedAt: nowIso(),
+    completedAt: null,
+  },
+  completedCycles: [],
   sends: DEFAULT_SENDS,
-  schedule: { ...DEFAULT_SCHEDULE, startDate: today() },
   settings: DEFAULT_SETTINGS,
 });
+function migrateV2toV3(raw){
+  return {
+    schemaVersion: 3,
+    updatedAt: raw.updatedAt || nowIso(),
+    activeCycle: {
+      cycleId: "cycle_migrated",
+      cycleNumber: 1,
+      planTemplateId: "foundation-12wk",
+      plan: raw.plan || DEFAULT_PLAN,
+      logs: raw.logs || {},
+      metrics: Array.isArray(raw.metrics) ? raw.metrics : [],
+      schedule: raw.schedule || { ...DEFAULT_SCHEDULE, startDate: today() },
+      startedAt: raw.schedule?.startDate
+        ? new Date(`${raw.schedule.startDate}T12:00:00`).toISOString()
+        : raw.updatedAt || nowIso(),
+      completedAt: null,
+    },
+    completedCycles: [],
+    sends: raw.sends || DEFAULT_SENDS,
+    settings: raw.settings || {},
+  };
+}
 function normalizeLog(log){
   if(!log || typeof log!=="object") return log;
   return {
@@ -385,27 +607,39 @@ function normalizeLogs(logs){
   return Object.fromEntries(Object.entries(logs).map(([k,v])=>[k,normalizeLog(v)]));
 }
 function normalizeAppData(raw){
-  const base=makeDefaultAppData();
+  if(!raw) return makeDefaultAppData();
+  // Migrate v2 → v3 (flat plan/logs/metrics at root)
+  if((raw.schemaVersion||1) < 3 && !raw.activeCycle){
+    raw = migrateV2toV3(raw);
+  }
+  const base = makeDefaultAppData();
+  const ac = raw.activeCycle || base.activeCycle;
   return {
-    ...base,
-    ...(raw||{}),
     schemaVersion: SCHEMA_VERSION,
-    updatedAt: raw?.updatedAt || raw?.exportedAt || base.updatedAt,
-    plan: raw?.plan?.weeks ? raw.plan : base.plan,
-    logs: normalizeLogs(raw?.logs),
-    metrics: Array.isArray(raw?.metrics) ? raw.metrics : base.metrics,
-    sends: raw?.sends && typeof raw.sends==="object" ? raw.sends : base.sends,
-    schedule: {
-      ...base.schedule,
-      ...(raw?.schedule||{}),
-      preferredSessionDays: {
-        ...base.schedule.preferredSessionDays,
-        ...(raw?.schedule?.preferredSessionDays||{}),
+    updatedAt: raw.updatedAt || raw.exportedAt || base.updatedAt,
+    activeCycle: {
+      cycleId: ac.cycleId || base.activeCycle.cycleId,
+      cycleNumber: ac.cycleNumber || 1,
+      planTemplateId: ac.planTemplateId || "foundation-12wk",
+      plan: ac.plan?.weeks ? ac.plan : base.activeCycle.plan,
+      logs: normalizeLogs(ac.logs),
+      metrics: Array.isArray(ac.metrics) ? ac.metrics : [],
+      schedule: {
+        ...base.activeCycle.schedule,
+        ...(ac.schedule||{}),
+        preferredSessionDays: {
+          ...base.activeCycle.schedule.preferredSessionDays,
+          ...(ac.schedule?.preferredSessionDays||{}),
+        },
+        travelBlocks: Array.isArray(ac.schedule?.travelBlocks) ? ac.schedule.travelBlocks : [],
+        sessionOverrides: (ac.schedule?.sessionOverrides && typeof ac.schedule.sessionOverrides==="object") ? ac.schedule.sessionOverrides : {},
       },
-      travelBlocks: Array.isArray(raw?.schedule?.travelBlocks) ? raw.schedule.travelBlocks : [],
-      sessionOverrides: raw?.schedule?.sessionOverrides && typeof raw.schedule.sessionOverrides==="object" ? raw.schedule.sessionOverrides : {},
+      startedAt: ac.startedAt || base.activeCycle.startedAt,
+      completedAt: ac.completedAt || null,
     },
-    settings: { ...base.settings, ...(raw?.settings||{}) },
+    completedCycles: Array.isArray(raw.completedCycles) ? raw.completedCycles : [],
+    sends: raw.sends && typeof raw.sends==="object" ? raw.sends : base.sends,
+    settings: { ...base.settings, ...(raw.settings||{}) },
   };
 }
 function loadAppData(){
@@ -430,10 +664,17 @@ function saveAppData(next, opts={}){
 function exportBackup(data){ return JSON.stringify({ ...normalizeAppData(data), exportedAt:new Date().toISOString() }, null, 2); }
 function importBackup(json, current){
   const parsed=JSON.parse(json);
+  // Legacy plan-only import (array of weeks at root)
   if(parsed?.weeks && Array.isArray(parsed.weeks)){
-    return { ok:true, data:{ ...current, plan:parsed } };
+    return { ok:true, data:normalizeAppData({ ...current, activeCycle:{ ...current.activeCycle, plan:parsed } }) };
   }
-  if(!parsed?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
+  // Full v2 backup (plan.weeks at root, no activeCycle)
+  if(parsed?.plan?.weeks && !parsed?.activeCycle){
+    const migrated=migrateV2toV3(parsed);
+    return { ok:true, data:normalizeAppData({ ...migrated, completedCycles: current.completedCycles||[] }) };
+  }
+  // v3 backup
+  if(!parsed?.activeCycle?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
   return { ok:true, data:normalizeAppData({ ...current, ...parsed }) };
 }
 function newestAppData(local, remote){
@@ -1062,6 +1303,288 @@ function AuthScreen({ email, setEmail, password, setPassword, message, onSubmit 
   );
 }
 
+/* ============================ CYCLE LOGIC ============================ */
+function isPlanComplete(planWeeks, logs){
+  if(!planWeeks||!planWeeks.length) return false;
+  const last=planWeeks[planWeeks.length-1];
+  return last.sessions.every(s=>{
+    const l=logs[logKey(last.week,s.id)];
+    return l&&(l.status==="Y"||l.status==="partial");
+  });
+}
+function computeCycleSummary(planWeeks, logs, metrics){
+  const scheduled=planWeeks.reduce((n,w)=>n+w.sessions.length,0);
+  const done=Object.values(logs).filter(l=>l.status==="Y"||l.status==="partial").length;
+  const pu=metrics.filter(m=>m.pullups!=null);
+  const fl=metrics.filter(m=>m.flash!=null);
+  return {
+    totalSessionsDone:done, totalSessionsScheduled:scheduled,
+    adherencePct:scheduled>0?Math.round((done/scheduled)*100):0,
+    pullupStart:pu[0]?.pullups??null, pullupEnd:pu[pu.length-1]?.pullups??null,
+    flashStart:fl[0]?.flash??null, flashEnd:fl[fl.length-1]?.flash??null,
+    projectEnd:[...metrics].reverse().find(m=>m.project!=null)?.project??null,
+    painSessions:Object.values(logs).filter(l=>l.pain).length,
+  };
+}
+function archiveActiveCycle(appData, chosenTemplateId, newStartDate){
+  const ac=appData.activeCycle;
+  const summary=computeCycleSummary(ac.plan.weeks,ac.logs,ac.metrics);
+  const archived={ ...ac, completedAt:nowIso(), summary };
+  const tpl=PLAN_TEMPLATES[chosenTemplateId];
+  const newCycle={
+    cycleId:`cycle_${Date.now()}`,
+    cycleNumber:(appData.completedCycles.length||0)+2,
+    planTemplateId:chosenTemplateId,
+    plan:tpl.plan,
+    logs:{}, metrics:[],
+    schedule:{ ...ac.schedule, startDate:newStartDate, travelBlocks:[], sessionOverrides:{} },
+    startedAt:new Date(`${newStartDate}T12:00:00`).toISOString(),
+    completedAt:null,
+  };
+  return { ...appData, activeCycle:newCycle, completedCycles:[...appData.completedCycles,archived] };
+}
+
+/* ============================ STAT BOX ============================ */
+function StatBox({ label, value, sub }){
+  return (
+    <div style={{background:"var(--granite)",borderRadius:12,padding:"12px 14px"}}>
+      <div className="disp" style={{fontSize:22,fontWeight:800,lineHeight:1,marginBottom:4}}>{value}</div>
+      <div style={{fontSize:11,color:"var(--rope)",letterSpacing:".04em",textTransform:"uppercase",marginBottom:3}}>{label}</div>
+      {sub&&<div style={{fontSize:11,color:"var(--faint)"}}>{sub}</div>}
+    </div>
+  );
+}
+
+/* ============================ CHECKPOINT PROMPT ============================ */
+function CheckpointPrompt({ week, onSave, onDismiss }){
+  const [pullups,setPullups]=useState("");
+  const [flash,setFlash]=useState("");
+  const accent=week.type==="test"?"var(--test)":"var(--deload)";
+  return (
+    <div className="card fadein" style={{padding:15,marginBottom:14,borderColor:accent}}>
+      <div className="disp" style={{fontSize:14,color:accent,marginBottom:6}}>
+        End of Block — Week {week.week} {week.type==="test"?"test":"deload"} complete
+      </div>
+      <p style={{fontSize:13,color:"var(--chalk-dim)",margin:"0 0 12px",lineHeight:1.5}}>
+        Log your checkpoint metrics now to track progress across the plan.
+      </p>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+        <Field label="Max pull-ups">
+          <input className="tinput" type="number" min={0} max={60} placeholder="—" value={pullups}
+            onChange={e=>setPullups(e.target.value)}/>
+        </Field>
+        <Field label="Flash grade">
+          <select className="tinput" value={flash} onChange={e=>setFlash(e.target.value)}>
+            <option value="">—</option>
+            {[0,1,2,3,4,5].map(v=><option key={v} value={v}>V{v}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn btn-rope" style={{flex:1,padding:10}} onClick={()=>{
+          onSave({ week:week.week, date:today(), pullups:pullups?+pullups:null, flash:flash!==""?+flash:null, project:null, sleep:null, pain:"" });
+          onDismiss();
+        }}>Save checkpoint</button>
+        <button className="btn btn-ghost" style={{padding:10}} onClick={onDismiss}>Skip</button>
+      </div>
+    </div>
+  );
+}
+
+/* ============================ PLAN COMPLETION MODAL ============================ */
+const LEVEL_COLOR={ beginner:"var(--moss)", intermediate:"var(--rope)", advanced:"var(--deload)" };
+
+function PlanCompletionModal({ plan, logs, metrics, schedule, completedCycles, onStart, onClose }){
+  const [stage,setStage]=useState("celebration");
+  const [selectedTpl,setSelectedTpl]=useState(null);
+  const [startDate,setStartDate]=useState(today());
+  const summary=computeCycleSummary(plan.weeks,logs,metrics);
+  const lastFlash=[...metrics].reverse().find(m=>m.flash!=null)?.flash??null;
+  const lastPullups=[...metrics].reverse().find(m=>m.pullups!=null)?.pullups??null;
+
+  return (
+    <div className="ct-root" style={{position:"fixed",inset:0,zIndex:75,overflowY:"auto"}}>
+      <style>{STYLE}</style>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 80px"}}>
+
+        {stage==="celebration" && (
+          <div className="fadein stagger">
+            <div style={{textAlign:"center",marginBottom:28,paddingTop:20}}>
+              <div style={{width:64,height:64,borderRadius:18,background:"var(--rope)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}>
+                <Award size={36} color="#1a120c"/>
+              </div>
+              <h1 className="disp" style={{fontSize:28,fontWeight:800,margin:"0 0 6px"}}>Plan complete!</h1>
+              <div style={{color:"var(--chalk-dim)",fontSize:15}}>{plan.name}</div>
+            </div>
+            <div className="card" style={{padding:16,marginBottom:16}}>
+              <div className="disp" style={{fontSize:12,color:"var(--rope)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:12}}>Your results</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <StatBox label="Sessions done" value={`${summary.totalSessionsDone}/${summary.totalSessionsScheduled}`} sub={`${summary.adherencePct}% adherence`}/>
+                <StatBox label="Pull-up change"
+                  value={summary.pullupStart!=null&&summary.pullupEnd!=null?`${summary.pullupEnd>=summary.pullupStart?"+":""}${summary.pullupEnd-summary.pullupStart}`:"—"}
+                  sub={summary.pullupStart!=null?`${summary.pullupStart} → ${summary.pullupEnd??summary.pullupStart}`:"Not logged"}/>
+                <StatBox label="Flash grade"
+                  value={summary.flashEnd!=null?`V${summary.flashEnd}`:"—"}
+                  sub={summary.flashStart!=null&&summary.flashEnd!=null&&summary.flashStart!==summary.flashEnd?`Was V${summary.flashStart}`:summary.flashStart!=null?`Started V${summary.flashStart}`:"Not logged"}/>
+                <StatBox label="Pain sessions" value={summary.painSessions} sub={summary.painSessions===0?"Pain-free run!":"Sessions flagged"}/>
+              </div>
+            </div>
+            <button className="btn btn-rope" style={{width:"100%",padding:14,fontSize:16,marginBottom:10}} onClick={()=>setStage("picking-plan")}>
+              Choose your next plan
+            </button>
+            <button className="btn btn-ghost" style={{width:"100%",padding:12}} onClick={()=>{setSelectedTpl("foundation-12wk");setStage("confirming");}}>
+              Restart this plan
+            </button>
+          </div>
+        )}
+
+        {stage==="picking-plan" && (
+          <div className="fadein stagger">
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+              <button className="btn btn-ghost" style={{padding:8}} onClick={()=>setStage("celebration")}><ChevronLeft size={16}/></button>
+              <h2 className="disp" style={{fontSize:22,margin:0}}>Choose next plan</h2>
+            </div>
+            <div className="card" style={{padding:14,marginBottom:16}}>
+              <div style={{fontSize:12,color:"var(--faint)",marginBottom:8}}>Carries forward to your new plan</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {lastPullups!=null&&<span className="pill" style={{background:"var(--surface2)",color:"var(--chalk)"}}>{lastPullups} pull-ups baseline</span>}
+                {lastFlash!=null&&<span className="pill" style={{background:"var(--surface2)",color:"var(--chalk)"}}>V{lastFlash} flash grade</span>}
+                <span className="pill" style={{background:"var(--surface2)",color:"var(--chalk)"}}>Your climbing pyramid</span>
+                <span className="pill" style={{background:"var(--surface2)",color:"var(--chalk)"}}>Session day preferences</span>
+              </div>
+            </div>
+            {Object.values(PLAN_TEMPLATES).map(t=>(
+              <div key={t.id} className="card" style={{padding:16,marginBottom:12,cursor:"pointer",borderColor:selectedTpl===t.id?"var(--rope)":"var(--line)"}} onClick={()=>setSelectedTpl(t.id)}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                  <strong className="disp" style={{fontSize:16}}>{t.name}</strong>
+                  <span className="pill" style={{background:"var(--surface2)",color:LEVEL_COLOR[t.level]||"var(--chalk)"}}>{t.level}</span>
+                </div>
+                <div style={{fontSize:13,color:"var(--chalk-dim)",marginBottom:8}}>{t.subtitle}</div>
+                <div style={{fontSize:12,color:"var(--faint)"}}>{t.targetGrades} · {t.phases.join(" → ")}</div>
+                {selectedTpl===t.id&&(
+                  <button className="btn btn-rope" style={{width:"100%",padding:10,marginTop:12}} onClick={e=>{e.stopPropagation();setStage("confirming");}}>
+                    Select this plan →
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {stage==="confirming" && selectedTpl && (()=>{
+          const t=PLAN_TEMPLATES[selectedTpl];
+          return (
+            <div className="fadein stagger">
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+                <button className="btn btn-ghost" style={{padding:8}} onClick={()=>setStage("picking-plan")}><ChevronLeft size={16}/></button>
+                <h2 className="disp" style={{fontSize:22,margin:0}}>Confirm & start</h2>
+              </div>
+              <div className="card" style={{padding:16,marginBottom:14}}>
+                <strong className="disp" style={{fontSize:18,display:"block",marginBottom:4}}>{t.name}</strong>
+                <div style={{fontSize:13,color:"var(--chalk-dim)",marginBottom:10}}>{t.subtitle}</div>
+                <div style={{fontSize:12,color:"var(--faint)"}}>{t.phases.join(" → ")}</div>
+              </div>
+              <div className="card" style={{padding:14,marginBottom:16}}>
+                <Field label="Start date">
+                  <input className="tinput" type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/>
+                </Field>
+              </div>
+              <button className="btn btn-rope" style={{width:"100%",padding:14,fontSize:16,marginBottom:10}} onClick={()=>onStart(selectedTpl,startDate)}>
+                Start {t.name}
+              </button>
+              <button className="btn btn-ghost" style={{width:"100%",padding:12}} onClick={onClose}>
+                Continue reviewing results
+              </button>
+            </div>
+          );
+        })()}
+
+      </div>
+    </div>
+  );
+}
+
+/* ============================ CYCLE HISTORY VIEW ============================ */
+function CycleHistoryView({ completedCycles, onClose }){
+  const [expanded,setExpanded]=useState(null);
+  return (
+    <div className="ct-root" style={{position:"fixed",inset:0,zIndex:60,overflowY:"auto"}}>
+      <style>{STYLE}</style>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 60px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+          <button className="btn btn-ghost" style={{padding:8}} onClick={onClose}><ChevronLeft size={16}/></button>
+          <h2 className="disp" style={{fontSize:22,margin:0}}>Training history</h2>
+        </div>
+        {!completedCycles.length && (
+          <div style={{color:"var(--chalk-dim)",fontSize:14,textAlign:"center",marginTop:60,lineHeight:1.6}}>
+            No completed cycles yet.<br/>Finish your first plan to see your history here.
+          </div>
+        )}
+        {[...completedCycles].reverse().map(cycle=>{
+          const s=cycle.summary||{};
+          const t=PLAN_TEMPLATES[cycle.planTemplateId];
+          const startStr=cycle.startedAt?new Date(cycle.startedAt).toLocaleDateString(undefined,{month:"short",year:"numeric"}):"?";
+          const endStr=cycle.completedAt?new Date(cycle.completedAt).toLocaleDateString(undefined,{month:"short",year:"numeric"}):"?";
+          const isOpen=expanded===cycle.cycleId;
+          return (
+            <div key={cycle.cycleId} className="card" style={{padding:16,marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div>
+                  <div className="disp" style={{fontSize:16,fontWeight:700}}>Cycle {cycle.cycleNumber} — {t?.name||cycle.planTemplateId}</div>
+                  <div style={{fontSize:12,color:"var(--faint)",marginTop:2}}>{startStr} → {endStr}</div>
+                </div>
+                <button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:12}} onClick={()=>setExpanded(isOpen?null:cycle.cycleId)}>
+                  {isOpen?"Hide":"Expand"}
+                </button>
+              </div>
+              <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                {s.totalSessionsDone!=null&&<span style={{fontSize:12,color:"var(--chalk-dim)"}}>{s.totalSessionsDone}/{s.totalSessionsScheduled} sessions ({s.adherencePct}%)</span>}
+                {s.pullupStart!=null&&s.pullupEnd!=null&&<span style={{fontSize:12,color:"var(--moss)"}}>{s.pullupEnd>=s.pullupStart?"+":""}{s.pullupEnd-s.pullupStart} pull-ups</span>}
+                {s.flashEnd!=null&&<span style={{fontSize:12,color:"var(--chalk-dim)"}}>V{s.flashEnd} flash{s.flashStart!=null&&s.flashStart!==s.flashEnd?` (was V${s.flashStart})`:""}</span>}
+                {s.projectEnd!=null&&<span style={{fontSize:12,color:"var(--chalk-dim)"}}>V{s.projectEnd} proj</span>}
+              </div>
+              {isOpen&&(
+                <div className="fadein" style={{marginTop:14}}>
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:11,color:"var(--faint)",marginBottom:8,letterSpacing:".04em",textTransform:"uppercase"}}>Weekly completion</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {(cycle.plan?.weeks||[]).map(w=>(
+                        <div key={w.week} style={{textAlign:"center"}}>
+                          <div style={{fontSize:9,color:"var(--faint)",marginBottom:2}}>W{w.week}</div>
+                          <div style={{display:"flex",gap:2}}>
+                            {w.sessions.map(s=>{
+                              const l=(cycle.logs||{})[logKey(w.week,s.id)];
+                              const dot=l?.status==="Y"?"var(--moss)":l?.status==="partial"?"var(--rope)":l?.status==="skip"?"var(--surface2)":"var(--line)";
+                              return <div key={s.id} style={{width:7,height:7,borderRadius:"50%",background:dot}}/>;
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {(cycle.metrics||[]).filter(m=>m.pullups!=null||m.flash!=null).length>0&&(
+                    <div>
+                      <div style={{fontSize:11,color:"var(--faint)",marginBottom:8,letterSpacing:".04em",textTransform:"uppercase"}}>Metrics logged</div>
+                      {(cycle.metrics||[]).filter(m=>m.pullups!=null||m.flash!=null).map((m,i)=>(
+                        <div key={i} style={{display:"flex",gap:12,fontSize:12,color:"var(--chalk-dim)",padding:"4px 0",borderTop:"1px solid var(--line)"}}>
+                          <span style={{color:"var(--faint)",minWidth:40}}>Wk {m.week}</span>
+                          {m.pullups!=null&&<span>{m.pullups} pull-ups</span>}
+                          {m.flash!=null&&<span>V{m.flash} flash</span>}
+                          {m.project!=null&&<span>V{m.project} proj</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ============================ APP ============================ */
 export default function App(){
   const [plan,setPlan]=useState(DEFAULT_PLAN);
@@ -1069,6 +1592,11 @@ export default function App(){
   const [metrics,setMetrics]=useState([]);
   const [schedule,setSchedule]=useState({ ...DEFAULT_SCHEDULE, startDate: today() });
   const [settings,setSettings]=useState(DEFAULT_SETTINGS);
+  const [completedCycles,setCompletedCycles]=useState([]);
+  const [cycleMeta,setCycleMeta]=useState({ cycleId:`cycle_${Date.now()}`, cycleNumber:1, planTemplateId:"foundation-12wk", startedAt:nowIso(), completedAt:null });
+  const [completionModal,setCompletionModal]=useState(null);
+  const [showHistory,setShowHistory]=useState(false);
+  const [dismissedCheckpoints,setDismissedCheckpoints]=useState([]);
   const [dataUpdatedAt,setDataUpdatedAt]=useState(null);
   const [loaded,setLoaded]=useState(false);
   const [authReady,setAuthReady]=useState(!isCloudConfigured);
@@ -1091,13 +1619,17 @@ export default function App(){
   const currentAppData=()=>({
     schemaVersion:SCHEMA_VERSION,
     updatedAt:dataUpdatedAt || nowIso(),
-    plan, logs, metrics, sends, schedule, settings,
+    activeCycle:{ ...cycleMeta, plan, logs, metrics, schedule },
+    completedCycles, sends, settings,
   });
   const applyAppData=(data)=>{
-    const normalized=normalizeAppData(data);
-    setPlan(normalized.plan); setLogs(normalized.logs); setMetrics(normalized.metrics); setSends(normalized.sends);
-    setSchedule(normalized.schedule); setSettings(normalized.settings); setDataUpdatedAt(normalized.updatedAt);
-    setCurWeek(currentScheduleState(normalized.plan,normalized.schedule,normalized.logs).currentWeek);
+    const n=normalizeAppData(data);
+    const ac=n.activeCycle;
+    setPlan(ac.plan); setLogs(ac.logs); setMetrics(ac.metrics); setSchedule(ac.schedule);
+    setSends(n.sends); setSettings(n.settings); setDataUpdatedAt(n.updatedAt);
+    setCompletedCycles(n.completedCycles);
+    setCycleMeta({ cycleId:ac.cycleId, cycleNumber:ac.cycleNumber, planTemplateId:ac.planTemplateId, startedAt:ac.startedAt, completedAt:ac.completedAt });
+    setCurWeek(currentScheduleState(ac.plan,ac.schedule,ac.logs).currentWeek);
   };
   const pushCloudData=async(data)=>{
     if(!isCloudConfigured || !session?.user) return;
@@ -1182,7 +1714,7 @@ export default function App(){
     }
     const saved=saveAppData(next);
     queueCloudSave(saved);
-  },[plan,logs,metrics,sends,schedule,settings,loaded]);
+  },[plan,logs,metrics,sends,schedule,settings,completedCycles,cycleMeta,loaded]);
   useEffect(()=>{
     if(typeof window === "undefined") return;
     const online=()=>{ if(session?.user) queueCloudSave(loadAppData()); };
@@ -1203,7 +1735,21 @@ export default function App(){
   const schedState=currentScheduleState(plan,schedule,logs);
   const combinedSends=addSendMaps(sends,sendsFromLogs(logs));
 
-  const saveLog=(wk,sid,data)=>{ setLogs(p=>({...p,[logKey(wk,sid)]:normalizeLog(data)})); setRunner(null); };
+  const saveLog=(wk,sid,data)=>{
+    const updatedLog=normalizeLog(data);
+    const updatedLogs={ ...logs, [logKey(wk,sid)]:updatedLog };
+    setLogs(updatedLogs);
+    setRunner(null);
+    if(!completionModal && isPlanComplete(plan.weeks,updatedLogs)){
+      setTimeout(()=>setCompletionModal("celebration"),400);
+    }
+  };
+  const archiveAndStartNewCycle=(templateId,startDate)=>{
+    const newData=archiveActiveCycle(currentAppData(),templateId,startDate);
+    applyAppData(newData);
+    setCompletionModal(null);
+    setTab("today");
+  };
   const openCalendarSession=(item)=>{
     setCurWeek(item.week);
     setRunner({week:item.week,session:item.session});
@@ -1300,8 +1846,17 @@ export default function App(){
           const rDone=weekRoutineDone(wk,curWeek,logs);
           const rKeys=Object.keys(rTargets);
           const travelToday=activeTravelBlock(schedule,today());
+          const checkpointWeek=plan.weeks.find(w=>
+            (w.type==="deload"||w.type==="test") &&
+            w.sessions.every(s=>{const l=logs[logKey(w.week,s.id)];return l&&(l.status==="Y"||l.status==="partial"||l.status==="skip");}) &&
+            !metrics.some(m=>m.week===w.week) &&
+            !dismissedCheckpoints.includes(w.week)
+          );
           return (
           <div className="stagger">
+            {checkpointWeek&&<CheckpointPrompt week={checkpointWeek}
+              onSave={entry=>setMetrics(m=>[...m.filter(x=>x.week!==entry.week),entry].sort((a,b)=>a.week-b.week))}
+              onDismiss={()=>setDismissedCheckpoints(d=>[...d,checkpointWeek.week])}/>}
             <div className="card" style={{padding:15,marginBottom:14,borderColor:schedState.due.length?"var(--rope)":schedState.overdue.length?"var(--deload)":"var(--line)"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,marginBottom:9}}>
                 <div className="disp" style={{fontSize:15,color:"var(--rope)"}}>Today</div>
@@ -1510,7 +2065,7 @@ export default function App(){
         {tab==="calendar" && <CalendarView plan={plan} schedule={schedule} setSchedule={setSchedule} logs={logs} onOpenSession={openCalendarSession}/>}
 
         {/* ===== METRICS ===== */}
-        {tab==="metrics" && <Metrics metrics={metrics} setMetrics={setMetrics} planLen={plan.weeks.length}/>}
+        {tab==="metrics" && <Metrics metrics={metrics} setMetrics={setMetrics} planLen={plan.weeks.length} onShowHistory={()=>setShowHistory(true)} hasHistory={completedCycles.length>0}/>}
 
         {/* ===== LIBRARY ===== */}
         {tab==="library" && <Library/>}
@@ -1527,8 +2082,9 @@ export default function App(){
         </div>
       </div>
 
-      {manage && <Manage data={{ schemaVersion:SCHEMA_VERSION, updatedAt:dataUpdatedAt, plan, logs, metrics, sends, schedule, settings }}
-        onReplace={replaceAppData} setPlan={setPlan} setSchedule={setSchedule} onClose={()=>setManage(false)}/>}
+      {manage && <Manage data={currentAppData()} onReplace={replaceAppData} setPlan={setPlan} setSchedule={setSchedule} onClose={()=>setManage(false)}/>}
+      {completionModal && <PlanCompletionModal plan={plan} logs={logs} metrics={metrics} schedule={schedule} completedCycles={completedCycles} onStart={archiveAndStartNewCycle} onClose={()=>setCompletionModal(null)}/>}
+      {showHistory && <CycleHistoryView completedCycles={completedCycles} onClose={()=>setShowHistory(false)}/>}
       {drill && <DrillSheet name={drill} onClose={()=>setDrill(null)}/>}
       {routine && <RoutineSheet rkey={routine} week={curWeek} onClose={()=>setRoutine(null)} onDrill={(n)=>setDrill(n)}/>}
     </div>
@@ -1536,7 +2092,7 @@ export default function App(){
 }
 
 /* ============================ METRICS ============================ */
-function Metrics({ metrics, setMetrics, planLen }){
+function Metrics({ metrics, setMetrics, planLen, onShowHistory, hasHistory }){
   const [w,setW]=useState(metrics.length?"" : 1);
   const [pu,setPu]=useState(""); const [fl,setFl]=useState(""); const [pr,setPr]=useState("");
   const [sl,setSl]=useState(""); const [pn,setPn]=useState("");
@@ -1552,7 +2108,10 @@ function Metrics({ metrics, setMetrics, planLen }){
 
   return (
     <div className="stagger">
-      <h2 className="disp" style={{fontSize:22,margin:"0 0 12px"}}>Progress Metrics</h2>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <h2 className="disp" style={{fontSize:22,margin:0}}>Progress Metrics</h2>
+        {hasHistory&&<button className="btn btn-ghost" style={{padding:"6px 10px",fontSize:12,display:"flex",gap:5,alignItems:"center"}} onClick={onShowHistory}><History size={14}/>History</button>}
+      </div>
 
       {delta!=null && (
         <div className="card" style={{padding:16,marginBottom:14,display:"flex",alignItems:"center",gap:14}}>
@@ -1663,14 +2222,15 @@ function Library(){
 
 /* ============================ MANAGE (import/export) ============================ */
 function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
+  const sc=data.activeCycle?.schedule||data.schedule||{};
   const [json,setJson]=useState("");
   const [msg,setMsg]=useState("");
-  const [blockDraft,setBlockDraft]=useState(JSON.stringify(data.schedule.travelBlocks||[],null,2));
+  const [blockDraft,setBlockDraft]=useState(JSON.stringify(sc.travelBlocks||[],null,2));
   const exportAll=()=>setJson(exportBackup(data));
   const importAll=()=>{
     try{
       const result=importBackup(json,data);
-      if(result.ok){ onReplace(result.data); setBlockDraft(JSON.stringify(result.data.schedule.travelBlocks||[],null,2)); setMsg("✓ Backup imported"); }
+      if(result.ok){ onReplace(result.data); setBlockDraft(JSON.stringify((result.data.activeCycle?.schedule||result.data.schedule||{}).travelBlocks||[],null,2)); setMsg("✓ Backup imported"); }
     }
     catch(e){ setMsg("✗ "+e.message); }
   };
@@ -1694,11 +2254,11 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
         </p>
         <div className="card" style={{padding:14,marginBottom:14}}>
           <div className="disp" style={{fontSize:14,color:"var(--rope)",marginBottom:10}}>Schedule</div>
-          <Field label="Plan start date"><input className="tinput" type="date" value={data.schedule.startDate||""} onChange={e=>setSchedule(s=>({...s,startDate:e.target.value}))}/></Field>
+          <Field label="Plan start date"><input className="tinput" type="date" value={sc.startDate||""} onChange={e=>setSchedule(s=>({...s,startDate:e.target.value}))}/></Field>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
             {SESSION_IDS.map(id=>(
               <Field key={id} label={id==="support"?"Support":`Climb ${id.slice(-1)}`}>
-                <select className="tinput" value={data.schedule.preferredSessionDays?.[id] ?? 0} onChange={e=>setSchedule(s=>({...s,preferredSessionDays:{...s.preferredSessionDays,[id]:+e.target.value}}))}>
+                <select className="tinput" value={sc.preferredSessionDays?.[id]??0} onChange={e=>setSchedule(s=>({...s,preferredSessionDays:{...s.preferredSessionDays,[id]:+e.target.value}}))}>
                   {WEEKDAYS.map((d,i)=><option key={d} value={i}>{d}</option>)}
                 </select>
               </Field>
