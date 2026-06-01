@@ -1228,13 +1228,22 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
 
 /* ============================ CALENDAR ============================ */
 function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
-  const [selected,setSelected]=useState(today());
-  const [viewMonth,setViewMonth]=useState(monthStart(today()));
+  const items=scheduleItems(plan,schedule,logs);
+  // Start the calendar on the month that has the most relevant content:
+  // upcoming open session → current week's first session → today
+  const _initialDate=(() => {
+    const t=today();
+    const upcoming=items.find(i=>i.date>=t && isOpenLog(i.log));
+    if(upcoming) return upcoming.date;
+    const last=items.filter(i=>i.date<=t).at(-1);
+    return last?.date || t;
+  })();
+  const [selected,setSelected]=useState(_initialDate);
+  const [viewMonth,setViewMonth]=useState(monthStart(_initialDate));
   const [showBlockForm,setShowBlockForm]=useState(false);
   const [editingBlock,setEditingBlock]=useState(null);
   const [blockForm,setBlockForm]=useState({label:"",startDate:today(),endDate:today(),notes:""});
   const [shiftDraft,setShiftDraft]=useState({});
-  const items=scheduleItems(plan,schedule,logs);
   const monthItems=items.filter(i=>monthKey(i.date)===monthKey(viewMonth));
   const monthEffortByDate=monthItems.reduce((acc,i)=>{
     const effort=itemEffort(i).value;
