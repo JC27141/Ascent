@@ -15,13 +15,14 @@ const STYLE = `
   --line:#46392b; --chalk:#f3ece0; --chalk-dim:#b6a890; --faint:#7d6f5b;
   --rope:#d4673a; --rope-soft:#a44e2c; --deload:#d99a2b; --test:#6699b3; --moss:#9bab63;
 }
-html,body,#root{margin:0;min-height:100%;background:var(--granite);}
-body{overflow-x:hidden;}
+html,body,#root{margin:0;width:100%;min-height:100%;background:var(--granite);}
+html,body{height:100%;overflow-x:hidden;}
+#root{min-height:100vh;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 .ct-root{font-family:'Spline Sans',system-ui,sans-serif;color:var(--chalk);background:
   radial-gradient(900px 600px at 80% -10%, rgba(212,103,58,.10), transparent 60%),
   radial-gradient(700px 500px at -10% 110%, rgba(102,153,179,.08), transparent 55%),
-  var(--granite);min-height:100%;}
+  var(--granite);min-height:100vh;width:100%;}
 .ct-root::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;z-index:0;
   background-image:repeating-radial-gradient(circle at 50% 30%, transparent 0 38px, rgba(125,111,91,.05) 38px 39px);}
 .disp{font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;}
