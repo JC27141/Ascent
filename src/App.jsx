@@ -183,6 +183,16 @@ const ROUTINES = {
 
 /* ============================ DRILL DETAIL + SENDS ============================ */
 const DEFAULT_SENDS = { 0:8, 1:12, 2:9, 3:3, 4:0 };
+const SCHEMA_VERSION = 1;
+const APP_DATA_KEY = "ascent_app_data_v1";
+const SESSION_IDS = ["climb1", "climb2", "climb3", "support"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DEFAULT_SCHEDULE = {
+  startDate: "",
+  preferredSessionDays: { climb1:1, climb2:3, climb3:5, support:6 },
+  travelBlocks: [],
+};
+const DEFAULT_SETTINGS = { };
 
 const DETAIL = {
   "Silent / precision feet":{fig:"feet",look:"Your toe lands once, dead on the hold, and makes no sound — no scrape, no second adjustment.",fix:"Most common error: dragging or re-placing the foot once it's on. Reset and place it cleanly."},
@@ -335,19 +345,70 @@ function Pyramid({ sends, setSends, flash }){
 }
 
 /* ============================ STORAGE ============================ */
-const memFallback = {};
-const hasStore = typeof window !== "undefined" && window.storage;
-const store = {
-  async get(k, def) {
-    if (!hasStore) return k in memFallback ? memFallback[k] : def;
-    try { const r = await window.storage.get(k); return r ? JSON.parse(r.value) : def; }
-    catch { return def; }
-  },
-  async set(k, v) {
-    if (!hasStore) { memFallback[k] = v; return; }
-    try { await window.storage.set(k, JSON.stringify(v)); } catch (e) { console.error(e); }
-  },
+const canUseStorage = () => typeof window !== "undefined" && window.localStorage;
+const readJson = (k, def=null) => {
+  if (!canUseStorage()) return def;
+  try { const raw=window.localStorage.getItem(k); return raw ? JSON.parse(raw) : def; }
+  catch { return def; }
 };
+const writeJson = (k, v) => {
+  if (!canUseStorage()) return;
+  window.localStorage.setItem(k, JSON.stringify(v));
+};
+const makeDefaultAppData = () => ({
+  schemaVersion: SCHEMA_VERSION,
+  plan: DEFAULT_PLAN,
+  logs: {},
+  metrics: [],
+  sends: DEFAULT_SENDS,
+  schedule: { ...DEFAULT_SCHEDULE, startDate: today() },
+  settings: DEFAULT_SETTINGS,
+});
+function normalizeAppData(raw){
+  const base=makeDefaultAppData();
+  return {
+    ...base,
+    ...(raw||{}),
+    schemaVersion: SCHEMA_VERSION,
+    plan: raw?.plan?.weeks ? raw.plan : base.plan,
+    logs: raw?.logs && typeof raw.logs==="object" ? raw.logs : base.logs,
+    metrics: Array.isArray(raw?.metrics) ? raw.metrics : base.metrics,
+    sends: raw?.sends && typeof raw.sends==="object" ? raw.sends : base.sends,
+    schedule: {
+      ...base.schedule,
+      ...(raw?.schedule||{}),
+      preferredSessionDays: {
+        ...base.schedule.preferredSessionDays,
+        ...(raw?.schedule?.preferredSessionDays||{}),
+      },
+      travelBlocks: Array.isArray(raw?.schedule?.travelBlocks) ? raw.schedule.travelBlocks : [],
+    },
+    settings: { ...base.settings, ...(raw?.settings||{}) },
+  };
+}
+function loadAppData(){
+  const saved=readJson(APP_DATA_KEY);
+  if(saved) return normalizeAppData(saved);
+  const legacy={
+    plan: readJson("ct_plan", DEFAULT_PLAN),
+    logs: readJson("ct_logs", {}),
+    metrics: readJson("ct_metrics", []),
+    sends: readJson("ct_sends", DEFAULT_SENDS),
+  };
+  const migrated=normalizeAppData(legacy);
+  writeJson(APP_DATA_KEY, migrated);
+  return migrated;
+}
+function saveAppData(next){ writeJson(APP_DATA_KEY, normalizeAppData(next)); }
+function exportBackup(data){ return JSON.stringify({ ...normalizeAppData(data), exportedAt:new Date().toISOString() }, null, 2); }
+function importBackup(json, current){
+  const parsed=JSON.parse(json);
+  if(parsed?.weeks && Array.isArray(parsed.weeks)){
+    return { ok:true, data:{ ...current, plan:parsed } };
+  }
+  if(!parsed?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
+  return { ok:true, data:normalizeAppData({ ...current, ...parsed }) };
+}
 
 /* ============================ HELPERS ============================ */
 const exByName = (n) => EX.find((e) => e.n === n);
@@ -355,6 +416,44 @@ const fmt = (s) => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).p
 const today = () => new Date().toISOString().slice(0,10);
 const PHASE_COLOR = { deload:"var(--deload)", test:"var(--test)", normal:"var(--rope)" };
 const CAT_ICON = { Shoulder:Wind, "Pull-ups":Dumbbell, Core:Activity, "Foot/Ankle":Footprints, Fingers:Hand, Technique:Mountain, Antagonist:Dumbbell };
+const logKey = (week, sid) => `${week}-${sid}`;
+const addDays = (date, days) => {
+  const d=new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate()+days);
+  return d.toISOString().slice(0,10);
+};
+const scheduledDate = (schedule, weekNum, sid) => addDays(schedule.startDate || today(), (weekNum-1)*7 + +(schedule.preferredSessionDays?.[sid] ?? 0));
+const sessionTitle = (s) => s?.day || "Session";
+function activeTravelBlock(schedule, date){
+  return (schedule.travelBlocks||[]).find(b=>b.startDate && b.endDate && date>=b.startDate && date<=b.endDate);
+}
+function scheduleItems(plan, schedule, logs){
+  return plan.weeks.flatMap(w=>w.sessions.map(s=>{
+    const date=scheduledDate(schedule,w.week,s.id);
+    return { week:w.week, phase:w.phase, type:w.type, session:s, date, log:logs[logKey(w.week,s.id)], travel:activeTravelBlock(schedule,date) };
+  })).sort((a,b)=>a.date.localeCompare(b.date));
+}
+function currentScheduleState(plan, schedule, logs){
+  const items=scheduleItems(plan,schedule,logs);
+  const t=today();
+  const open=items.filter(i=>!i.log || i.log.status==="skip");
+  const overdue=open.filter(i=>i.date<t);
+  const due=open.filter(i=>i.date===t);
+  const upcoming=open.find(i=>i.date>=t) || null;
+  const last=items.filter(i=>i.date<=t).at(-1);
+  const currentWeek=last?.week || 1;
+  return { items, overdue, due, upcoming, currentWeek };
+}
+function addSendMaps(...maps){
+  const out={};
+  maps.forEach(m=>Object.entries(m||{}).forEach(([g,n])=>{ out[g]=(out[g]||0)+(+n||0); }));
+  return out;
+}
+function sendsFromLogs(logs){
+  const out={};
+  Object.values(logs).forEach(l=>Object.entries(l.volumeByGrade||{}).forEach(([g,n])=>{ out[g]=(out[g]||0)+(+n||0); }));
+  return out;
+}
 
 function lastClimbDate(logs){
   let latest=null;
@@ -416,7 +515,7 @@ function Timer({ initial=60 }){
 }
 
 /* ============================ RUNNER ============================ */
-function Runner({ week, session, onClose, onSave, spacingWarn }){
+function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
   const sessionRoutines=session.routines||[];
   const steps=[];
   steps.push({kind:"warmup"});
@@ -424,17 +523,19 @@ function Runner({ week, session, onClose, onSave, spacingWarn }){
   sessionRoutines.forEach(r=>steps.push({kind:"routine",rkey:r}));
   steps.push({kind:"log"});
   const [i,setI]=useState(0);
-  const [status,setStatus]=useState("Y");
-  const [rpe,setRpe]=useState(6);
-  const [pain,setPain]=useState(false);
-  const [notes,setNotes]=useState("");
-  const [rd,setRd]=useState(sessionRoutines); // routines done
+  const [status,setStatus]=useState(existingLog?.status || "Y");
+  const [rpe,setRpe]=useState(existingLog?.rpe || 6);
+  const [pain,setPain]=useState(!!existingLog?.pain);
+  const [notes,setNotes]=useState(existingLog?.notes || "");
+  const [rd,setRd]=useState(existingLog?.routinesDone || sessionRoutines); // routines done
+  const [volume,setVolume]=useState(existingLog?.volumeByGrade || {});
   const [d,setD]=useState(null);
   const step=steps[i];
   const last=i===steps.length-1;
   const toggleR=(r)=>setRd(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
 
-  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:today()}); };
+  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:today(),volumeByGrade:volume}); };
+  const bumpVolume=(g,delta)=>setVolume(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
 
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:50,overflowY:"auto"}}>
@@ -548,6 +649,25 @@ function Runner({ week, session, onClose, onSave, spacingWarn }){
                   </div>
                 </div>
               )}
+              {session.id!=="support" && (
+                <div className="card" style={{padding:12,marginBottom:16,background:"var(--granite)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
+                    <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0}}>Problems sent by grade</div>
+                    <div style={{fontSize:11,color:"var(--faint)"}}>feeds pyramid</div>
+                  </div>
+                  {[0,1,2,3,4,5].map(g=>(
+                    <div key={g} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                      <button onClick={()=>bumpVolume(g,-1)} style={{width:28,height:28,borderRadius:7,border:"1px solid var(--line)",background:"transparent",color:"var(--faint)",cursor:"pointer",fontSize:17,lineHeight:1}}>–</button>
+                      <div className="disp mono" style={{width:36,textAlign:"center",fontSize:13,color:"var(--chalk-dim)"}}>V{g}</div>
+                      <div style={{flex:1,height:8,background:"var(--surface2)",borderRadius:8,overflow:"hidden"}}>
+                        <div style={{width:`${Math.min(100,(+volume[g]||0)*12)}%`,height:"100%",background:"var(--rope)",borderRadius:8}}/>
+                      </div>
+                      <div className="mono" style={{width:24,textAlign:"right",fontSize:13,color:"var(--chalk)"}}>{+volume[g]||0}</div>
+                      <button onClick={()=>bumpVolume(g,1)} style={{width:28,height:28,borderRadius:7,border:"1px solid var(--rope)",background:"transparent",color:"var(--rope)",cursor:"pointer",fontSize:17,lineHeight:1}}>+</button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <button className="btn" style={{width:"100%",padding:"12px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
                 background:pain?"var(--rope-soft)":"var(--surface)",color:"var(--chalk)",border:`1px solid ${pain?"var(--rope)":"var(--line)"}`}}
                 onClick={()=>setPain(p=>!p)}>
@@ -582,6 +702,8 @@ export default function App(){
   const [plan,setPlan]=useState(DEFAULT_PLAN);
   const [logs,setLogs]=useState({});
   const [metrics,setMetrics]=useState([]);
+  const [schedule,setSchedule]=useState({ ...DEFAULT_SCHEDULE, startDate: today() });
+  const [settings,setSettings]=useState(DEFAULT_SETTINGS);
   const [loaded,setLoaded]=useState(false);
   const [tab,setTab]=useState("today");
   const [curWeek,setCurWeek]=useState(1);
@@ -592,31 +714,41 @@ export default function App(){
   const [drill,setDrill]=useState(null);
   const [routine,setRoutine]=useState(null);
 
-  useEffect(()=>{(async()=>{
-    setPlan(await store.get("ct_plan",DEFAULT_PLAN));
-    setLogs(await store.get("ct_logs",{}));
-    setMetrics(await store.get("ct_metrics",[]));
-    setSends(await store.get("ct_sends",DEFAULT_SENDS));
+  useEffect(()=>{
+    const data=loadAppData();
+    setPlan(data.plan);
+    setLogs(data.logs);
+    setMetrics(data.metrics);
+    setSends(data.sends);
+    setSchedule(data.schedule);
+    setSettings(data.settings);
+    setCurWeek(currentScheduleState(data.plan,data.schedule,data.logs).currentWeek);
     setLoaded(true);
-  })();},[]);
-  useEffect(()=>{if(loaded)store.set("ct_plan",plan);},[plan,loaded]);
-  useEffect(()=>{if(loaded)store.set("ct_logs",logs);},[logs,loaded]);
-  useEffect(()=>{if(loaded)store.set("ct_metrics",metrics);},[metrics,loaded]);
-  useEffect(()=>{if(loaded)store.set("ct_sends",sends);},[sends,loaded]);
+  },[]);
+  useEffect(()=>{
+    if(loaded) saveAppData({ schemaVersion:SCHEMA_VERSION, plan, logs, metrics, sends, schedule, settings });
+  },[plan,logs,metrics,sends,schedule,settings,loaded]);
 
   const week=plan.weeks.find(w=>w.week===curWeek)||plan.weeks[0];
   const totalSessions=plan.weeks.length*4;
   const doneCount=Object.values(logs).filter(l=>l.status==="Y"||l.status==="partial").length;
   const spacingWarn=daysSince(lastClimbDate(logs))<2;
   const latestFlash=[...metrics].reverse().find(m=>m.flash!=null)?.flash ?? null;
+  const schedState=currentScheduleState(plan,schedule,logs);
+  const combinedSends=addSendMaps(sends,sendsFromLogs(logs));
 
-  const saveLog=(wk,sid,data)=>{ setLogs(p=>({...p,[`${wk}-${sid}`]:data})); setRunner(null); };
+  const saveLog=(wk,sid,data)=>{ setLogs(p=>({...p,[logKey(wk,sid)]:data})); setRunner(null); };
+  const replaceAppData=(data)=>{
+    setPlan(data.plan); setLogs(data.logs); setMetrics(data.metrics); setSends(data.sends);
+    setSchedule(data.schedule); setSettings(data.settings); setCurWeek(currentScheduleState(data.plan,data.schedule,data.logs).currentWeek);
+  };
 
   return (
     <div className="ct-root" style={{minHeight:"100vh"}}>
       <style>{STYLE}</style>
       {runner && <Runner week={runner.week} session={runner.session}
         spacingWarn={spacingWarn && runner.session.id!=="support"}
+        existingLog={logs[logKey(runner.week,runner.session.id)]}
         onClose={()=>setRunner(null)} onSave={d=>saveLog(runner.week,runner.session.id,d)}/>}
 
       <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 100px"}}>
@@ -645,8 +777,29 @@ export default function App(){
           const rTargets=weekRoutineTargets(wk);
           const rDone=weekRoutineDone(wk,curWeek,logs);
           const rKeys=Object.keys(rTargets);
+          const travelToday=activeTravelBlock(schedule,today());
           return (
           <div className="stagger">
+            <div className="card" style={{padding:15,marginBottom:14,borderColor:schedState.due.length?"var(--rope)":schedState.overdue.length?"var(--deload)":"var(--line)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,marginBottom:9}}>
+                <div className="disp" style={{fontSize:15,color:"var(--rope)"}}>Today</div>
+                <button className="btn btn-ghost" style={{padding:"5px 9px",fontSize:12}} onClick={()=>setManage(true)}>Schedule</button>
+              </div>
+              <div style={{fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>
+                {schedState.due.length>0 ? (
+                  <>Due now: {schedState.due.map(i=>`W${i.week} ${sessionTitle(i.session)}`).join(", ")}.</>
+                ) : schedState.overdue.length>0 ? (
+                  <>Overdue: {schedState.overdue.slice(0,2).map(i=>`W${i.week} ${sessionTitle(i.session)} (${i.date})`).join(", ")}.</>
+                ) : schedState.upcoming ? (
+                  <>Next up: W{schedState.upcoming.week} {sessionTitle(schedState.upcoming.session)} on {schedState.upcoming.date}.</>
+                ) : <>All scheduled sessions are logged.</>}
+              </div>
+              {travelToday && (
+                <div style={{marginTop:10,padding:"9px 10px",borderRadius:10,background:"var(--granite)",border:"1px solid var(--deload)",fontSize:13,color:"var(--chalk-dim)"}}>
+                  {travelToday.label || "Travel block"} is active today. Treat this as a prompt to go lighter, slide sessions, or use deload-style climbing.
+                </div>
+              )}
+            </div>
             {/* WEEK HERO */}
             <div className="card" style={{padding:0,marginBottom:14,overflow:"hidden"}}>
               <div style={{padding:"16px 16px 15px",borderLeft:`4px solid ${accent}`}}>
@@ -716,7 +869,7 @@ export default function App(){
             )}
 
             {/* CLIMBING PYRAMID */}
-            <Pyramid sends={sends} setSends={setSends} flash={latestFlash}/>
+            <Pyramid sends={combinedSends} setSends={setSends} flash={latestFlash}/>
 
             {spacingWarn && (
               <div className="card" style={{padding:13,borderColor:"var(--deload)",marginBottom:14,display:"flex",gap:10}}>
@@ -728,12 +881,15 @@ export default function App(){
             <div style={{fontSize:11,color:"var(--faint)",textTransform:"uppercase",letterSpacing:".06em",margin:"4px 2px 10px"}}>This week's sessions</div>
             {wk.sessions.map(s=>{
               const log=logs[`${curWeek}-${s.id}`];
+              const sDate=scheduledDate(schedule,curWeek,s.id);
+              const sTravel=activeTravelBlock(schedule,sDate);
               return (
                 <div key={s.id} className="card" style={{padding:15,marginBottom:11,
-                  borderLeft:`3px solid ${wk.type==="deload"?"var(--deload)":wk.type==="test"?"var(--test)":"var(--line)"}`}}>
+                  borderLeft:`3px solid ${sTravel?"var(--deload)":wk.type==="deload"?"var(--deload)":wk.type==="test"?"var(--test)":"var(--line)"}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                     <div style={{flex:1}}>
                       <div className="disp" style={{fontSize:13,color:"var(--faint)",letterSpacing:".04em",textTransform:"uppercase"}}>{s.day}</div>
+                      <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:2}}>{sDate}</div>
                       <div style={{fontSize:15,marginTop:3,lineHeight:1.4}}>{s.focus}</div>
                     </div>
                     {log ? (
@@ -744,11 +900,22 @@ export default function App(){
                         </div>
                         {log.status!=="skip" && <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:4}}>RPE {log.rpe}</div>}
                         {log.pain && <AlertTriangle size={13} style={{color:"var(--deload)",marginTop:3}}/>}
+                        <button className="btn btn-ghost" style={{padding:"5px 8px",fontSize:11,marginTop:5}} onClick={()=>setRunner({week:curWeek,session:s})}>Edit</button>
                       </div>
                     ):(
                       <button className="btn btn-rope" style={{padding:"8px 12px",display:"flex",alignItems:"center",gap:5,fontSize:13}} onClick={()=>setRunner({week:curWeek,session:s})}><Play size={14}/>Start</button>
                     )}
                   </div>
+                  {sTravel && (
+                    <div style={{marginTop:10,fontSize:12,color:"var(--deload)"}}>
+                      {sTravel.label || "Travel block"} overlaps this session. Consider going lighter or sliding it.
+                    </div>
+                  )}
+                  {log?.pain && (
+                    <div style={{marginTop:10,fontSize:12,color:"var(--deload)"}}>
+                      Pain was flagged here. Next session should be lighter until it settles.
+                    </div>
+                  )}
                   {s.drills && s.drills.length>0 && (
                     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
                       {s.drills.map(dn=>(
@@ -835,7 +1002,8 @@ export default function App(){
         </div>
       </div>
 
-      {manage && <Manage plan={plan} setPlan={setPlan} onClose={()=>setManage(false)}/>}
+      {manage && <Manage data={{ schemaVersion:SCHEMA_VERSION, plan, logs, metrics, sends, schedule, settings }}
+        onReplace={replaceAppData} setPlan={setPlan} setSchedule={setSchedule} onClose={()=>setManage(false)}/>}
       {drill && <DrillSheet name={drill} onClose={()=>setDrill(null)}/>}
       {routine && <RoutineSheet rkey={routine} week={curWeek} onClose={()=>setRoutine(null)} onDrill={(n)=>setDrill(n)}/>}
     </div>
@@ -969,15 +1137,25 @@ function Library(){
 }
 
 /* ============================ MANAGE (import/export) ============================ */
-function Manage({ plan, setPlan, onClose }){
+function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
   const [json,setJson]=useState("");
   const [msg,setMsg]=useState("");
-  const exportPlan=()=>setJson(JSON.stringify(plan,null,2));
-  const importPlan=()=>{
-    try{ const p=JSON.parse(json);
-      if(!p.weeks||!Array.isArray(p.weeks)) throw new Error("Plan needs a 'weeks' array");
-      setPlan(p); setMsg("✓ Plan imported"); }
+  const [blockDraft,setBlockDraft]=useState(JSON.stringify(data.schedule.travelBlocks||[],null,2));
+  const exportAll=()=>setJson(exportBackup(data));
+  const importAll=()=>{
+    try{
+      const result=importBackup(json,data);
+      if(result.ok){ onReplace(result.data); setBlockDraft(JSON.stringify(result.data.schedule.travelBlocks||[],null,2)); setMsg("✓ Backup imported"); }
+    }
     catch(e){ setMsg("✗ "+e.message); }
+  };
+  const saveBlocks=()=>{
+    try{
+      const blocks=JSON.parse(blockDraft||"[]");
+      if(!Array.isArray(blocks)) throw new Error("Travel blocks must be an array");
+      setSchedule(s=>({...s,travelBlocks:blocks}));
+      setMsg("✓ Travel blocks saved");
+    } catch(e){ setMsg("✗ "+e.message); }
   };
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:60,overflowY:"auto"}}>
@@ -987,14 +1165,32 @@ function Manage({ plan, setPlan, onClose }){
           <button className="btn btn-ghost" style={{padding:8}} onClick={onClose}><X size={18}/></button>
         </div>
         <p style={{color:"var(--chalk-dim)",fontSize:14,lineHeight:1.55,marginTop:0}}>
-          Your plan is just data. Export it to back it up, edit the JSON, or paste in a completely new plan — your logs and metrics stay untouched.
+          Back up the whole trainer: plan, logs, metrics, pyramid corrections, schedule, and settings. Plan-only JSON still imports without touching your history.
         </p>
-        <div style={{display:"flex",gap:8,margin:"14px 0"}}>
-          <button className="btn btn-ghost" style={{flex:1,padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={exportPlan}><Download size={16}/>Export current</button>
-          <button className="btn btn-ghost" style={{flex:1,padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={()=>{setPlan(DEFAULT_PLAN);setMsg("✓ Reset to default");}}><RefreshCw size={16}/>Reset</button>
+        <div className="card" style={{padding:14,marginBottom:14}}>
+          <div className="disp" style={{fontSize:14,color:"var(--rope)",marginBottom:10}}>Schedule</div>
+          <Field label="Plan start date"><input className="tinput" type="date" value={data.schedule.startDate||""} onChange={e=>setSchedule(s=>({...s,startDate:e.target.value}))}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
+            {SESSION_IDS.map(id=>(
+              <Field key={id} label={id==="support"?"Support":`Climb ${id.slice(-1)}`}>
+                <select className="tinput" value={data.schedule.preferredSessionDays?.[id] ?? 0} onChange={e=>setSchedule(s=>({...s,preferredSessionDays:{...s.preferredSessionDays,[id]:+e.target.value}}))}>
+                  {WEEKDAYS.map((d,i)=><option key={d} value={i}>{d}</option>)}
+                </select>
+              </Field>
+            ))}
+          </div>
+          <Field label="Travel / deload blocks JSON">
+            <textarea className="tinput mono" rows={5} style={{fontSize:12}} value={blockDraft} onChange={e=>setBlockDraft(e.target.value)}
+              placeholder='[{"label":"Victoria","startDate":"2026-06-20","endDate":"2026-06-27"}]'/>
+          </Field>
+          <button className="btn btn-ghost" style={{width:"100%",padding:10,marginTop:8}} onClick={saveBlocks}>Save travel blocks</button>
         </div>
-        <textarea className="tinput mono" rows={12} style={{fontSize:12}} placeholder='Paste a plan JSON here, then tap Import…' value={json} onChange={e=>setJson(e.target.value)}/>
-        <button className="btn btn-rope" style={{width:"100%",padding:12,marginTop:10,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={importPlan}><Upload size={16}/>Import plan</button>
+        <div style={{display:"flex",gap:8,margin:"14px 0"}}>
+          <button className="btn btn-ghost" style={{flex:1,padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={exportAll}><Download size={16}/>Export backup</button>
+          <button className="btn btn-ghost" style={{flex:1,padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={()=>{setPlan(DEFAULT_PLAN);setMsg("✓ Reset plan to default");}}><RefreshCw size={16}/>Reset plan</button>
+        </div>
+        <textarea className="tinput mono" rows={12} style={{fontSize:12}} placeholder='Paste a full backup or legacy plan JSON here…' value={json} onChange={e=>setJson(e.target.value)}/>
+        <button className="btn btn-rope" style={{width:"100%",padding:12,marginTop:10,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={importAll}><Upload size={16}/>Import</button>
         {msg && <div style={{marginTop:10,fontSize:14,color:msg[0]==="✓"?"var(--moss)":"var(--rope)"}}>{msg}</div>}
       </div>
     </div>
