@@ -9,13 +9,17 @@ The app came from a Claude single-file artifact and has been migrated into a Vit
 ## Git State
 
 - Repo path: `C:/Users/jeffc/Ascent`
+- Default branch: `main`
 - Baseline branch: `master`
-- Active implementation branch: `codex/pwa-hardening`
+- Previous implementation branch: `codex/pwa-hardening`
 - Remote: `origin` -> `https://github.com/JC27141/Ascent.git`
 - GitHub visibility: public
 - GitHub default branch: `main`
+- Local default branch: `main`
 - Local baseline branch: `master`
-- Local active implementation branch: `codex/pwa-hardening`
+- Historical implementation branch: `codex/pwa-hardening`
+
+New feature branches should be created from `main`.
 
 Current commit history:
 
@@ -164,7 +168,7 @@ If a remote is added, document:
 
 ## Known Limitations
 
-- No Git remote is configured yet.
+- Git remote is configured and `main` contains the current PWA app.
 - No automated tests exist yet.
 - Persistence is `localStorage`, not IndexedDB.
 - The app is still mostly single-file.
