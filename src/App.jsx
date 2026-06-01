@@ -3,7 +3,7 @@ import {
   Check, X, Lock, Play, Pause, RotateCcw, ChevronLeft, ChevronRight,
   Plus, AlertTriangle, Settings, Upload, Download, Pencil, Mountain,
   Activity, Flame, Footprints, Dumbbell, Hand, Wind, RefreshCw, Info,
-  CalendarDays, Trash2, MoveRight, LogOut, Wifi, WifiOff
+  CalendarDays, Trash2, MoveRight, LogOut, Wifi, WifiOff, Award, History
 } from "lucide-react";
 import { isCloudConfigured, supabase } from "./supabaseClient.js";
 
@@ -177,6 +177,198 @@ const DEFAULT_PLAN = {
   ],
 };
 
+const INTERMEDIATE_PLAN = {
+  name: "Intermediate 12-Week Progression",
+  idea: "You can flash V3 and are working V4–V5. This block builds volume at your limit, introduces max-strength work in month two, and peaks in a redpoint phase targeting V5. Pull-up intensity and finger prep increase progressively alongside climbing.",
+  weeks: [
+    W(1,"M1 · Volume","normal",
+      {focus:"Volume V3–V4: many attempts, apply route-reading.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine after."},
+      {focus:"Flash practice: on-sight V2–V3 without previewing.",drills:["Silent / precision feet"],routines:["Core"],note:"Core."},
+      {focus:"Projecting: 3–5 serious attempts on a V4.",drills:["Backstep / drop-knee"],routines:["Pull-ups","Shoulder"],note:"Pull-ups 3×(max-1). Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2×",["Shoulder","Pull-ups","Core","Antagonist"]),
+    W(2,"M1 · Volume","normal",
+      {focus:"Volume V3–V4, add dynamic moves.",drills:["Deadpoint / precise catch"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Flash practice V2–V3 + easy downclimbing.",drills:["Downclimbing"],routines:["Core"],note:"Core."},
+      {focus:"Projecting V4: full rests between attempts.",drills:["Route-reading routine"],routines:["Pull-ups","Shoulder"],note:"Pull-ups 3×(max-1). Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle"]),
+    W(3,"M1 · Volume","normal",
+      {focus:"Volume V3–V4: aim for 5+ problems at grade.",drills:["Hip turn + flagging"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Flash practice V3 + route-reading.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Projecting V4–V5: first V5 attempts if ready.",drills:["Backstep / drop-knee"],routines:["Pull-ups","Shoulder"],note:"Pull-ups 3×(max-1). Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle"]),
+    W(4,"M1 · Volume","deload",
+      {focus:"Easy climbing ~40% volume. No limit attempts.",drills:[],routines:[]},
+      {focus:"Easy volume, light footwork drills.",drills:["Silent / precision feet"],routines:[]},
+      {focus:"Light mixed climbing. Shoulder routine only.",drills:[],routines:["Shoulder"]},
+      "Shoulder routine light · 1 easy pull-up set · sleep focus",["Shoulder","Pull-ups"]),
+    W(5,"M2 · Max Strength","normal",
+      {focus:"Projecting V4–V5: structured max-effort sessions.",drills:[],routines:["Fingers"],note:"Foot-supported hangs — big edge, feet on, easy."},
+      {focus:"Flash practice V3. Route-reading L2.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V3–V4 + pull-ups (3 sets, max-1 clean reps).",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle","Fingers"]),
+    W(6,"M2 · Max Strength","normal",
+      {focus:"Projecting V5: 4–6 quality attempts, full rests.",drills:[],routines:["Fingers"],note:"Foot-supported hangs."},
+      {focus:"Flash V3. Visualize before each attempt.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V3–V4 + max pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle","Fingers"]),
+    W(7,"M2 · Max Strength","normal",
+      {focus:"Projecting V5. Trim warm-up; arrive strong.",drills:[],routines:["Fingers"],note:"Foot-supported hangs."},
+      {focus:"On-sight session: flash V3, attempt V4.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V4 + pull-up peak (max-1, reduce rest to 90s).",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Antagonist 2× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Antagonist","Foot/Ankle","Fingers"]),
+    W(8,"M2 · Max Strength","deload",
+      {focus:"Easy climbing ~40% volume. No projecting.",drills:[],routines:[]},
+      {focus:"Easy volume, quiet feet.",drills:["Silent / precision feet"],routines:[]},
+      {focus:"Light mixed climbing. Shoulder routine only.",drills:[],routines:["Shoulder"]},
+      "Shoulder routine light · 1 easy pull-up set · sleep focus",["Shoulder","Pull-ups"]),
+    W(9,"M3 · Redpoint","normal",
+      {focus:"Structured V5 redpoint: 4–6 max-quality attempts. Arrive fresh.",drills:[],routines:["Fingers"],note:"Foot-supported hangs."},
+      {focus:"On-sight: flash V3–V4. No previewing.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V4 + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Foot/ankle 2× · Route-reading L3",["Shoulder","Pull-ups","Core","Foot/Ankle","Fingers"]),
+    W(10,"M3 · Redpoint","normal",
+      {focus:"V5 redpoint. Repeat previous sessions' best sequence.",drills:[],routines:["Fingers"],note:"Foot-supported hangs."},
+      {focus:"On-sight V3–V4 + visualization.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V4 + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 3×(max-1) · Core 2× · Shoulder 2–3× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Foot/Ankle","Fingers"]),
+    W(11,"M3 · Redpoint","normal",
+      {focus:"V5 redpoint: trim easy volume, arrive at your best.",drills:[],routines:["Fingers"],note:"Gentle hangs."},
+      {focus:"On-sight + visualization. Target your tested flash grade.",drills:["Route-reading routine"],routines:["Core"],note:"Core."},
+      {focus:"Volume V4 + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 2× · Core 2× · Shoulder 2–3× · Foot/ankle 2×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(12,"M3 · Redpoint","test",
+      {focus:"TEST: retest max pull-ups; serious V5 attempt.",drills:[],routines:[]},
+      {focus:"TEST: attempt to flash a V4 on sight.",drills:[],routines:[]},
+      {focus:"Light mixed climbing. Log all results in Metrics.",drills:[],routines:[]},
+      "Mostly rest to arrive fresh · light shoulder routine · reassess next cycle",["Shoulder"]),
+  ],
+};
+
+const MAINTENANCE_PLAN = {
+  name: "Maintenance 8-Week Base",
+  idea: "Life got busy. Two shorter climbing sessions a week keeps nearly all your fitness for 8 weeks while your schedule settles. No projecting beyond your current onsight — the goal is holding what you have so the next full block starts strong.",
+  weeks: [
+    W(1,"M1 · Maintenance","normal",
+      {focus:"Easy climbing V0–V3 only. Quiet feet, enjoy movement.",drills:["Silent / precision feet"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery: easy yoga or light cycling. No hard climbing.",drills:[],routines:[]},
+      {focus:"Light V1–V3 volume + pull-ups (comfortable, not max).",drills:["Hip turn + flagging"],routines:["Pull-ups","Shoulder"],note:"Pull-ups light. Shoulder routine."},
+      "Pull-ups 2× light · Shoulder 2× · Core 1× · easy active recovery",["Shoulder","Pull-ups","Core"]),
+    W(2,"M1 · Maintenance","normal",
+      {focus:"Easy climbing V0–V3. Add some downclimbing.",drills:["Downclimbing"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery: gentle movement, no hard climbing.",drills:[],routines:[]},
+      {focus:"Light V2–V3 volume + pull-ups.",drills:["Straight-arm / resting on skeleton"],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 2× light · Shoulder 2× · Core 1× · active recovery",["Shoulder","Pull-ups","Core"]),
+    W(3,"M1 · Maintenance","normal",
+      {focus:"Easy climbing V0–V3. Focus on footwork precision.",drills:["Blind-foot placement"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery.",drills:[],routines:[]},
+      {focus:"Light V2–V3 volume + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 2× light · Shoulder 2× · Core 1× · Foot/ankle 1×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(4,"M1 · Maintenance","deload",
+      {focus:"Very easy climbing, very low volume. Rest focus.",drills:[],routines:[]},
+      {focus:"Complete rest or gentle walk.",drills:[],routines:[]},
+      {focus:"Light technique climbing V0–V2 only.",drills:["Silent / precision feet"],routines:["Shoulder"]},
+      "Shoulder routine light · rest · sleep focus",["Shoulder"]),
+    W(5,"M2 · Prep-Ramp","normal",
+      {focus:"V2–V4 volume: add a couple of project attempts at your onsight grade.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery or rest.",drills:[],routines:[]},
+      {focus:"V2–V4 volume + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Pull-ups building back. Shoulder routine."},
+      "Pull-ups 2× building · Shoulder 2× · Core 1× · Foot/ankle 1×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(6,"M2 · Prep-Ramp","normal",
+      {focus:"V3–V4 volume + one project attempt.",drills:["Backstep / drop-knee"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery.",drills:[],routines:[]},
+      {focus:"V3–V4 volume + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Pull-ups building. Shoulder routine."},
+      "Pull-ups 2× building · Shoulder 2× · Core 2× · Foot/ankle 1×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(7,"M2 · Prep-Ramp","normal",
+      {focus:"V3–V4 volume, flash practice V2–V3.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Rest.",drills:[],routines:[]},
+      {focus:"V3–V4 volume + pull-ups.",drills:[],routines:["Pull-ups","Shoulder"],note:"Shoulder routine."},
+      "Pull-ups 2–3× · Shoulder 2× · Core 2× · Foot/ankle 1×",["Shoulder","Pull-ups","Core","Foot/Ankle"]),
+    W(8,"M2 · Prep-Ramp","test",
+      {focus:"MINI-TEST: retest max pull-ups; attempt to flash your current grade.",drills:[],routines:[]},
+      {focus:"Light climbing + note how movement feels vs. 8 weeks ago.",drills:["Silent / precision feet"],routines:[]},
+      {focus:"Log all results in Metrics. Plan next full block.",drills:[],routines:[]},
+      "Rest to arrive fresh for test · light shoulder routine",["Shoulder"]),
+  ],
+};
+
+const INJURY_RETURN_PLAN = {
+  name: "Injury Return 8-Week",
+  idea: "You've had a finger, shoulder, or elbow niggle and it's settling down. Pain-free movement first, load second — grade doesn't matter for the first 4 weeks. If pain is ever above 2/10 during a session, stop and log it. Hangboard remains locked for the full 8 weeks regardless of how things feel.",
+  weeks: [
+    W(1,"M1 · Pain-Free Movement","normal",
+      {focus:"V0–V1 ONLY. Open-hand grip only. Stop at any twinge.",drills:["Silent / precision feet"],routines:["Shoulder"],note:"Shoulder routine + antagonist work."},
+      {focus:"Active recovery: easy walking or yoga. No climbing.",drills:[],routines:["Antagonist"],note:"Antagonist (push-ups, wrist extensors)."},
+      {focus:"V0–V1. Downclimbing practice — slow, controlled.",drills:["Downclimbing"],routines:["Shoulder"],note:"Shoulder routine."},
+      "NO pull-ups · Shoulder 2–3× · Antagonist daily · wrist extensors",["Shoulder","Antagonist"]),
+    W(2,"M1 · Pain-Free Movement","normal",
+      {focus:"V0–V2. Same open-hand rule. Stop at 2/10 pain.",drills:["Straight-arm / resting on skeleton"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery. Antagonist work.",drills:[],routines:["Antagonist"]},
+      {focus:"V0–V2. Footwork focus — load legs, not fingers.",drills:["Hip turn + flagging"],routines:["Shoulder"],note:"Shoulder routine."},
+      "NO pull-ups · Shoulder 2–3× · Antagonist daily · wrist extensors",["Shoulder","Antagonist"]),
+    W(3,"M1 · Pain-Free Movement","normal",
+      {focus:"V0–V2. One V3 attempt on a slopey/juggy problem if pain-free.",drills:["Silent / precision feet"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery. Antagonist work.",drills:[],routines:["Antagonist"]},
+      {focus:"V0–V2 volume. Footwork emphasis.",drills:["Blind-foot placement"],routines:["Shoulder"],note:"Shoulder routine."},
+      "Light scapular hangs ONLY if pain-free · Shoulder 2–3× · Antagonist daily",["Shoulder","Antagonist"]),
+    W(4,"M1 · Pain-Free Movement","deload",
+      {focus:"Very easy V0–V1 only. Extra rest.",drills:[],routines:[]},
+      {focus:"Complete rest or gentle walking.",drills:[],routines:[]},
+      {focus:"Easy V0–V2. Shoulder routine only.",drills:["Silent / precision feet"],routines:["Shoulder"]},
+      "Rest priority · Shoulder routine light · antagonist",["Shoulder","Antagonist"]),
+    W(5,"M2 · Gradual Load","normal",
+      {focus:"V2–V3 volume. One projecting attempt at V3 max.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery + antagonist.",drills:[],routines:["Antagonist"]},
+      {focus:"V2–V3 + foot-assisted active hangs (no pulling).",drills:[],routines:["Pull-ups","Shoulder"],note:"Active hangs only. Shoulder routine."},
+      "Foot-assisted active hangs 3×5 · Shoulder 2–3× · Antagonist 2× · Core 1×",["Shoulder","Pull-ups","Antagonist","Core"]),
+    W(6,"M2 · Gradual Load","normal",
+      {focus:"V2–V3 volume + 1–2 V4 attempts if pain-free.",drills:["Backstep / drop-knee"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery.",drills:[],routines:["Antagonist"]},
+      {focus:"V2–V3 + foot-assisted pull-up eccentrics (2–3 sets of 2).",drills:[],routines:["Pull-ups","Shoulder"],note:"Eccentrics only. Shoulder routine."},
+      "Foot-assisted eccentrics · Shoulder 2–3× · Antagonist 2× · Core 1×",["Shoulder","Pull-ups","Antagonist","Core"]),
+    W(7,"M2 · Gradual Load","normal",
+      {focus:"V3 volume + 1–2 V4 project attempts.",drills:["Route-reading routine"],routines:["Shoulder"],note:"Shoulder routine."},
+      {focus:"Active recovery + antagonist.",drills:[],routines:["Antagonist"]},
+      {focus:"V2–V3 + 1–2 unassisted pull-ups if pain-free.",drills:[],routines:["Pull-ups","Shoulder"],note:"1–2 pull-ups max. Shoulder routine."},
+      "Light pull-ups (2–3 max) · Shoulder 2–3× · Antagonist 2× · Core 1×",["Shoulder","Pull-ups","Antagonist","Core"]),
+    W(8,"M2 · Gradual Load","test",
+      {focus:"ASSESSMENT: highest pain-free grade; 2–3 pull-up attempts.",drills:[],routines:[]},
+      {focus:"Easy V0–V2. How does everything feel?",drills:["Silent / precision feet"],routines:[]},
+      {focus:"Log everything in Metrics. Decide: Foundation plan or extend maintenance.",drills:[],routines:[]},
+      "Log results · rest · choose next plan",["Shoulder"]),
+  ],
+};
+
+const PLAN_TEMPLATES = {
+  "foundation-12wk": {
+    id:"foundation-12wk", name:"Foundation 12-Week",
+    subtitle:"V0–V3 skill base, injury prep, pull-up ramp",
+    level:"beginner", targetGrades:"V0–V3",
+    phases:["M1 · Foundation (wk 1–4)","M2 · Skill Under Load (wk 5–8)","M3 · Performance (wk 9–12)"],
+    plan:DEFAULT_PLAN,
+  },
+  "intermediate-12wk": {
+    id:"intermediate-12wk", name:"Intermediate Progression",
+    subtitle:"V3–V5 volume, max strength phase, redpoint block",
+    level:"intermediate", targetGrades:"V3–V5",
+    phases:["M1 · Volume (wk 1–4)","M2 · Max Strength (wk 5–8)","M3 · Redpoint (wk 9–12)"],
+    plan:INTERMEDIATE_PLAN,
+  },
+  "maintenance-8wk": {
+    id:"maintenance-8wk", name:"Maintenance 8-Week",
+    subtitle:"Hold fitness during a busy period, ramp back in week 5",
+    level:"beginner", targetGrades:"Any",
+    phases:["M1 · Maintenance (wk 1–4)","M2 · Prep-Ramp (wk 5–8)"],
+    plan:MAINTENANCE_PLAN,
+  },
+  "injury-return-8wk": {
+    id:"injury-return-8wk", name:"Injury Return 8-Week",
+    subtitle:"Gentle return after a finger, shoulder, or elbow niggle",
+    level:"beginner", targetGrades:"V0–V2",
+    phases:["M1 · Pain-Free Movement (wk 1–4)","M2 · Gradual Load (wk 5–8)"],
+    plan:INJURY_RETURN_PLAN,
+  },
+};
+
 const ROUTINES = {
   "Shoulder":{label:"Shoulder routine",cat:"Shoulder"},
   "Pull-ups":{label:"Pull-ups",cat:"Pull-ups"},
@@ -188,7 +380,7 @@ const ROUTINES = {
 
 /* ============================ DRILL DETAIL + SENDS ============================ */
 const DEFAULT_SENDS = { 0:8, 1:12, 2:9, 3:3, 4:0 };
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const APP_DATA_KEY = "ascent_app_data_v1";
 const SESSION_IDS = ["climb1", "climb2", "climb3", "support"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -197,6 +389,7 @@ const DEFAULT_SCHEDULE = {
   preferredSessionDays: { climb1:1, climb2:3, climb3:5, support:6 },
   travelBlocks: [],
   sessionOverrides: {},
+  lastRescheduleUndo: null,
 };
 const DEFAULT_SETTINGS = { };
 
@@ -365,17 +558,48 @@ const nowIso = () => new Date().toISOString();
 const makeDefaultAppData = () => ({
   schemaVersion: SCHEMA_VERSION,
   updatedAt: nowIso(),
-  plan: DEFAULT_PLAN,
-  logs: {},
-  metrics: [],
+  activeCycle: {
+    cycleId: `cycle_${Date.now()}`,
+    cycleNumber: 1,
+    planTemplateId: "foundation-12wk",
+    plan: DEFAULT_PLAN,
+    logs: {},
+    metrics: [],
+    schedule: { ...DEFAULT_SCHEDULE, startDate: today() },
+    startedAt: nowIso(),
+    completedAt: null,
+  },
+  completedCycles: [],
   sends: DEFAULT_SENDS,
-  schedule: { ...DEFAULT_SCHEDULE, startDate: today() },
   settings: DEFAULT_SETTINGS,
 });
+function migrateV2toV3(raw){
+  return {
+    schemaVersion: 3,
+    updatedAt: raw.updatedAt || nowIso(),
+    activeCycle: {
+      cycleId: "cycle_migrated",
+      cycleNumber: 1,
+      planTemplateId: "foundation-12wk",
+      plan: raw.plan || DEFAULT_PLAN,
+      logs: raw.logs || {},
+      metrics: Array.isArray(raw.metrics) ? raw.metrics : [],
+      schedule: raw.schedule || { ...DEFAULT_SCHEDULE, startDate: today() },
+      startedAt: raw.schedule?.startDate
+        ? new Date(`${raw.schedule.startDate}T12:00:00`).toISOString()
+        : raw.updatedAt || nowIso(),
+      completedAt: null,
+    },
+    completedCycles: [],
+    sends: raw.sends || DEFAULT_SENDS,
+    settings: raw.settings || {},
+  };
+}
 function normalizeLog(log){
   if(!log || typeof log!=="object") return log;
   return {
     ...log,
+    skipAction: log.status==="skip" ? (log.skipAction || "reschedule") : undefined,
     volumeByGrade: log.volumeByGrade && typeof log.volumeByGrade==="object" ? log.volumeByGrade : {},
     attemptsByGrade: log.attemptsByGrade && typeof log.attemptsByGrade==="object" ? log.attemptsByGrade : {},
   };
@@ -385,27 +609,40 @@ function normalizeLogs(logs){
   return Object.fromEntries(Object.entries(logs).map(([k,v])=>[k,normalizeLog(v)]));
 }
 function normalizeAppData(raw){
-  const base=makeDefaultAppData();
+  if(!raw) return makeDefaultAppData();
+  // Migrate v2 → v3 (flat plan/logs/metrics at root)
+  if((raw.schemaVersion||1) < 3 && !raw.activeCycle){
+    raw = migrateV2toV3(raw);
+  }
+  const base = makeDefaultAppData();
+  const ac = raw.activeCycle || base.activeCycle;
   return {
-    ...base,
-    ...(raw||{}),
     schemaVersion: SCHEMA_VERSION,
-    updatedAt: raw?.updatedAt || raw?.exportedAt || base.updatedAt,
-    plan: raw?.plan?.weeks ? raw.plan : base.plan,
-    logs: normalizeLogs(raw?.logs),
-    metrics: Array.isArray(raw?.metrics) ? raw.metrics : base.metrics,
-    sends: raw?.sends && typeof raw.sends==="object" ? raw.sends : base.sends,
-    schedule: {
-      ...base.schedule,
-      ...(raw?.schedule||{}),
-      preferredSessionDays: {
-        ...base.schedule.preferredSessionDays,
-        ...(raw?.schedule?.preferredSessionDays||{}),
+    updatedAt: raw.updatedAt || raw.exportedAt || base.updatedAt,
+    activeCycle: {
+      cycleId: ac.cycleId || base.activeCycle.cycleId,
+      cycleNumber: ac.cycleNumber || 1,
+      planTemplateId: ac.planTemplateId || "foundation-12wk",
+      plan: ac.plan?.weeks ? ac.plan : base.activeCycle.plan,
+      logs: normalizeLogs(ac.logs),
+      metrics: Array.isArray(ac.metrics) ? ac.metrics : [],
+      schedule: {
+        ...base.activeCycle.schedule,
+        ...(ac.schedule||{}),
+        preferredSessionDays: {
+          ...base.activeCycle.schedule.preferredSessionDays,
+          ...(ac.schedule?.preferredSessionDays||{}),
+        },
+        travelBlocks: Array.isArray(ac.schedule?.travelBlocks) ? ac.schedule.travelBlocks : [],
+        sessionOverrides: (ac.schedule?.sessionOverrides && typeof ac.schedule.sessionOverrides==="object") ? ac.schedule.sessionOverrides : {},
+        lastRescheduleUndo: ac.schedule?.lastRescheduleUndo || null,
       },
-      travelBlocks: Array.isArray(raw?.schedule?.travelBlocks) ? raw.schedule.travelBlocks : [],
-      sessionOverrides: raw?.schedule?.sessionOverrides && typeof raw.schedule.sessionOverrides==="object" ? raw.schedule.sessionOverrides : {},
+      startedAt: ac.startedAt || base.activeCycle.startedAt,
+      completedAt: ac.completedAt || null,
     },
-    settings: { ...base.settings, ...(raw?.settings||{}) },
+    completedCycles: Array.isArray(raw.completedCycles) ? raw.completedCycles : [],
+    sends: raw.sends && typeof raw.sends==="object" ? raw.sends : base.sends,
+    settings: { ...base.settings, ...(raw.settings||{}) },
   };
 }
 function loadAppData(){
@@ -430,10 +667,17 @@ function saveAppData(next, opts={}){
 function exportBackup(data){ return JSON.stringify({ ...normalizeAppData(data), exportedAt:new Date().toISOString() }, null, 2); }
 function importBackup(json, current){
   const parsed=JSON.parse(json);
+  // Legacy plan-only import (array of weeks at root)
   if(parsed?.weeks && Array.isArray(parsed.weeks)){
-    return { ok:true, data:{ ...current, plan:parsed } };
+    return { ok:true, data:normalizeAppData({ ...current, activeCycle:{ ...current.activeCycle, plan:parsed } }) };
   }
-  if(!parsed?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
+  // Full v2 backup (plan.weeks at root, no activeCycle)
+  if(parsed?.plan?.weeks && !parsed?.activeCycle){
+    const migrated=migrateV2toV3(parsed);
+    return { ok:true, data:normalizeAppData({ ...migrated, completedCycles: current.completedCycles||[] }) };
+  }
+  // v3 backup
+  if(!parsed?.activeCycle?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
   return { ok:true, data:normalizeAppData({ ...current, ...parsed }) };
 }
 function newestAppData(local, remote){
@@ -485,10 +729,11 @@ function scheduleItems(plan, schedule, logs){
     return { key, week:w.week, phase:w.phase, type:w.type, session:s, date, planDate, shifted:date!==planDate, log:logs[key], travel:activeTravelBlock(schedule,date) };
   })).sort((a,b)=>a.date.localeCompare(b.date));
 }
+const isOpenLog = (log) => !log || (log.status==="skip" && log.skipAction!=="drop");
 function currentScheduleState(plan, schedule, logs){
   const items=scheduleItems(plan,schedule,logs);
   const t=today();
-  const open=items.filter(i=>!i.log || i.log.status==="skip");
+  const open=items.filter(i=>isOpenLog(i.log));
   const overdue=open.filter(i=>i.date<t);
   const due=open.filter(i=>i.date===t);
   const upcoming=open.find(i=>i.date>=t) || null;
@@ -524,10 +769,91 @@ function itemEffort(item){
   const logged=logEffort(item.log,item.session);
   return { value: logged ?? plannedEffort(item), logged: logged!=null };
 }
+function workoutSurfaceStyle(item){
+  const effort=Math.max(0,itemEffort(item).value||0);
+  const pct=Math.min(1, effort/32);
+  const isSupport=item.session?.id==="support";
+  const rgb=isSupport ? "102,153,179" : "212,103,58";
+  const alpha=(.045 + pct*.14).toFixed(3);
+  const edgeAlpha=(.08 + pct*.14).toFixed(3);
+  return {
+    background:`linear-gradient(135deg, rgba(${rgb},${alpha}), rgba(51,42,31,.76) 48%, rgba(25,21,15,.97))`,
+    boxShadow:`inset 0 1px 0 rgba(${rgb},${edgeAlpha})`,
+  };
+}
 function attemptStats(log){
   const entries=Object.entries(log?.attemptsByGrade||{}).map(([g,n])=>[+g,+n||0]).filter(([,n])=>n>0);
   if(!entries.length) return { count:0, hardest:null };
   return { count:entries.reduce((sum,[,n])=>sum+n,0), hardest:Math.max(...entries.map(([g])=>g)) };
+}
+function weeklyLogStats(logs, planLen){
+  const weeks=Array.from({length:planLen},(_,i)=>({
+    week:i+1, completed:0, sends:0, attempts:0, pain:0, rpeTotal:0, rpeCount:0,
+    volume:0, effort:0, hardestSend:null, hardestAttempt:null, sendsByGrade:{}, attemptsByGrade:{}
+  }));
+  Object.entries(logs||{}).forEach(([key,log])=>{
+    const week=+(key.split("-")[0]);
+    const row=weeks[week-1];
+    if(!row || !log || log.status==="skip") return;
+    if(log.status==="Y" || log.status==="partial") row.completed+=1;
+    if(log.pain) row.pain+=1;
+    const rpe=+log.rpe;
+    if(rpe){ row.rpeTotal+=rpe; row.rpeCount+=1; }
+    Object.entries(log.volumeByGrade||{}).forEach(([grade,count])=>{
+      const g=+grade, n=+count||0;
+      if(!n) return;
+      row.sends+=n;
+      row.sendsByGrade[g]=(row.sendsByGrade[g]||0)+n;
+      row.hardestSend=row.hardestSend==null ? g : Math.max(row.hardestSend,g);
+    });
+    Object.entries(log.attemptsByGrade||{}).forEach(([grade,count])=>{
+      const g=+grade, n=+count||0;
+      if(!n) return;
+      row.attempts+=n;
+      row.attemptsByGrade[g]=(row.attemptsByGrade[g]||0)+n;
+      row.hardestAttempt=row.hardestAttempt==null ? g : Math.max(row.hardestAttempt,g);
+    });
+    row.volume+=volumeScore(log.volumeByGrade);
+    row.effort+=logEffort(log,{ id:key.includes("support") ? "support" : "climb" }) || 0;
+  });
+  return weeks.map(w=>({
+    ...w,
+    avgRpe:w.rpeCount ? w.rpeTotal/w.rpeCount : null,
+    effort:Math.round(w.effort),
+  }));
+}
+function latestMetricValue(metrics, key){
+  return [...(metrics||[])].reverse().find(m=>m?.[key]!=null && m[key]!=="")?.[key] ?? null;
+}
+function metricDelta(metrics, key){
+  const pts=(metrics||[]).filter(m=>m?.[key]!=null && m[key]!=="");
+  if(pts.length<2) return null;
+  return { from:pts[0], to:pts.at(-1), value:+pts.at(-1)[key]-(+pts[0][key]) };
+}
+function buildMetricInsights(metrics, weeklyStats){
+  const insights=[];
+  const active=weeklyStats.filter(w=>w.completed || w.volume || w.effort || w.pain);
+  const last=active.at(-1), prev=active.at(-2);
+  if(last && prev && prev.effort>0 && last.effort>prev.effort*1.35){
+    insights.push({ tone:"warn", text:`Week ${last.week} load jumped ${Math.round((last.effort/prev.effort-1)*100)}%. Keep the next session crisp or go easier if fingers feel flat.` });
+  }
+  if(last?.pain && (last.avgRpe>=7 || (prev && last.effort>prev.effort))){
+    insights.push({ tone:"warn", text:`Pain showed up in week ${last.week} alongside meaningful stress. Treat that as a recovery signal, not a toughness test.` });
+  }
+  const flashDelta=metricDelta(metrics,"flash");
+  const projectDelta=metricDelta(metrics,"project");
+  const recentPain=active.slice(-2).some(w=>w.pain>0) || (metrics||[]).slice(-2).some(m=>m.pain);
+  if((flashDelta?.value>0 || projectDelta?.value>0) && !recentPain){
+    insights.push({ tone:"good", text:"Grade markers are moving without recent pain flags. That is the cleanest kind of progress." });
+  }
+  const pullDelta=metricDelta(metrics,"pullups");
+  if(pullDelta && pullDelta.value<=0 && (flashDelta?.value>0 || projectDelta?.value>0)){
+    insights.push({ tone:"good", text:"Climbing grades improved even though pull-ups did not. Movement efficiency is doing real work here." });
+  }
+  if(!insights.length){
+    insights.push({ tone:"note", text:"Keep logging simple weekly checkpoints. The useful pattern is usually consistency plus pain-free volume, not one heroic number." });
+  }
+  return insights.slice(0,3);
 }
 function nextUnblockedDates(schedule, fromDate, count=3){
   const out=[];
@@ -537,6 +863,90 @@ function nextUnblockedDates(schedule, fromDate, count=3){
     if(!activeTravelBlock(schedule,cursor)) out.push(cursor);
   }
   return out;
+}
+const isOpenScheduleItem = (item) => isOpenLog(item.log);
+const isClimbSession = (item) => item.session?.id?.startsWith("climb");
+function planOrderItems(plan, schedule, logs){
+  return plan.weeks.flatMap(w=>w.sessions.map(s=>{
+    const key=logKey(w.week,s.id);
+    const date=scheduledDate(schedule,w.week,s.id);
+    const planDate=plannedDate(schedule,w.week,s.id);
+    return { key, week:w.week, phase:w.phase, type:w.type, session:s, date, planDate, shifted:date!==planDate, log:logs[key], travel:activeTravelBlock(schedule,date) };
+  }));
+}
+function wouldMakeThreeClimbs(date, climbDates){
+  if(climbDates.has(date)) return false;
+  let start=date, end=date;
+  while(climbDates.has(addDays(start,-1))) start=addDays(start,-1);
+  while(climbDates.has(addDays(end,1))) end=addDays(end,1);
+  return daysBetween(start,end)+1>2;
+}
+function nextValidScheduleDate(schedule, fromDate, item, occupiedDates, climbDates, forceMove=false){
+  let cursor=forceMove ? addDays(fromDate,1) : fromDate;
+  for(let i=0; i<180; i++){
+    const blocked=activeTravelBlock(schedule,cursor);
+    const occupied=occupiedDates.has(cursor);
+    const tooManyClimbs=isClimbSession(item) && wouldMakeThreeClimbs(cursor,climbDates);
+    if(!blocked && !occupied && !tooManyClimbs) return cursor;
+    cursor=addDays(cursor,1);
+  }
+  return cursor;
+}
+function buildRescheduleCascade(plan, schedule, logs, startKey, reason="Reschedule"){
+  const items=planOrderItems(plan,schedule,logs);
+  const startIndex=items.findIndex(i=>i.key===startKey);
+  if(startIndex<0) return null;
+  const startItem=items[startIndex];
+  const occupiedDates=new Set();
+  const climbDates=new Set();
+  items.forEach((item,index)=>{
+    if(index<startIndex || !isOpenScheduleItem(item)){
+      occupiedDates.add(item.date);
+      if(isClimbSession(item)) climbDates.add(item.date);
+    }
+  });
+  const moved=[];
+  for(let index=startIndex; index<items.length; index++){
+    const item=items[index];
+    if(!isOpenScheduleItem(item)) continue;
+    const date=nextValidScheduleDate(schedule,item.date,item,occupiedDates,climbDates,index===startIndex);
+    occupiedDates.add(date);
+    if(isClimbSession(item)) climbDates.add(date);
+    if(date!==item.date){
+      moved.push({ key:item.key, week:item.week, session:item.session, fromDate:item.date, toDate:date, planDate:item.planDate });
+    }
+  }
+  if(!moved.length) return null;
+  const currentOverrides=schedule.sessionOverrides||{};
+  const changes=moved.map(m=>({ key:m.key, previousDate:currentOverrides[m.key] || null, nextDate:m.toDate, planDate:m.planDate }));
+  return { reason, startKey, startItem, moved, changes };
+}
+function applyCascadeToSchedule(schedule, cascade){
+  if(!cascade?.changes?.length) return schedule;
+  const overrides={...(schedule.sessionOverrides||{})};
+  cascade.changes.forEach(change=>{
+    if(change.nextDate && change.nextDate!==change.planDate) overrides[change.key]=change.nextDate;
+    else delete overrides[change.key];
+  });
+  return {
+    ...schedule,
+    sessionOverrides:overrides,
+    lastRescheduleUndo:{
+      createdAt:nowIso(),
+      reason:cascade.reason || "Reschedule",
+      changes:cascade.changes.map(({key,previousDate})=>({key,previousDate:previousDate || null})),
+    },
+  };
+}
+function undoLastReschedule(schedule){
+  const undo=schedule.lastRescheduleUndo;
+  if(!undo?.changes?.length) return schedule;
+  const overrides={...(schedule.sessionOverrides||{})};
+  undo.changes.forEach(change=>{
+    if(change.previousDate) overrides[change.key]=change.previousDate;
+    else delete overrides[change.key];
+  });
+  return { ...schedule, sessionOverrides:overrides, lastRescheduleUndo:null };
 }
 
 function lastClimbDate(logs){
@@ -564,6 +974,14 @@ function weekRoutineDone(wk, weekNum, logs){
     if(l&&l.routinesDone) (s.routines||[]).forEach(r=>{ if(l.routinesDone.includes(r)) d[r]=(d[r]||0)+1; });
   });
   return d;
+}
+
+function loggedSessionItems(plan, logs){
+  return plan.weeks.flatMap(w=>w.sessions.map(s=>{
+    const key=logKey(w.week,s.id);
+    const log=logs[key];
+    return log ? { key, week:w.week, session:s, log } : null;
+  }).filter(Boolean)).sort((a,b)=>(b.log.date||"").localeCompare(a.log.date||"") || b.week-a.week);
 }
 
 /* ============================ TIMER ============================ */
@@ -606,7 +1024,8 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
   if(session.id!=="support") steps.push({kind:"climb"});
   sessionRoutines.forEach(r=>steps.push({kind:"routine",rkey:r}));
   steps.push({kind:"log"});
-  const [i,setI]=useState(0);
+  const editing=!!existingLog;
+  const [i,setI]=useState(existingLog ? steps.length-1 : 0);
   const [status,setStatus]=useState(existingLog?.status || "Y");
   const [rpe,setRpe]=useState(existingLog?.rpe || 6);
   const [pain,setPain]=useState(!!existingLog?.pain);
@@ -619,7 +1038,7 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
   const last=i===steps.length-1;
   const toggleR=(r)=>setRd(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
 
-  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:today(),volumeByGrade:volume,attemptsByGrade:attempts}); };
+  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:existingLog?.date || today(),amendedAt:existingLog?nowIso():existingLog?.amendedAt,volumeByGrade:volume,attemptsByGrade:attempts}); };
   const bumpVolume=(g,delta)=>setVolume(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
   const bumpAttempts=(g,delta)=>setAttempts(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
 
@@ -706,7 +1125,12 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
           );})()}
           {step.kind==="log" && (
             <div>
-              <h2 className="disp" style={{fontSize:26,margin:"0 0 14px"}}>Log it</h2>
+              <h2 className="disp" style={{fontSize:26,margin:"0 0 14px"}}>{editing?"Amend log":"Log it"}</h2>
+              {editing && (
+                <div className="card" style={{padding:12,marginBottom:16,background:"var(--granite)",fontSize:13,color:"var(--chalk-dim)",lineHeight:1.45}}>
+                  Updating this keeps the original session date{existingLog?.date?` (${fmtFullDate(existingLog.date)})`:""} and refreshes the saved details.
+                </div>
+              )}
               <div style={{marginBottom:16}}>
                 <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0,marginBottom:8}}>Done?</div>
                 <div style={{display:"flex",gap:8}}>
@@ -784,7 +1208,7 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
                 </div>
               )}
               <textarea className="tinput" rows={3} placeholder="Notes — a tweak, a breakthrough, how feet felt…" value={notes} onChange={e=>setNotes(e.target.value)} style={{marginBottom:16}}/>
-              <button className="btn btn-rope" style={{width:"100%",padding:14,fontSize:16}} onClick={save}>Save session</button>
+              <button className="btn btn-rope" style={{width:"100%",padding:14,fontSize:16}} onClick={save}>{editing?"Update session log":"Save session"}</button>
             </div>
           )}
         </div>
@@ -804,13 +1228,22 @@ function Runner({ week, session, onClose, onSave, spacingWarn, existingLog }){
 
 /* ============================ CALENDAR ============================ */
 function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
-  const [selected,setSelected]=useState(today());
-  const [viewMonth,setViewMonth]=useState(monthStart(today()));
+  const items=scheduleItems(plan,schedule,logs);
+  // Start the calendar on the month that has the most relevant content:
+  // upcoming open session → current week's first session → today
+  const _initialDate=(() => {
+    const t=today();
+    const upcoming=items.find(i=>i.date>=t && isOpenLog(i.log));
+    if(upcoming) return upcoming.date;
+    const last=items.filter(i=>i.date<=t).at(-1);
+    return last?.date || t;
+  })();
+  const [selected,setSelected]=useState(_initialDate);
+  const [viewMonth,setViewMonth]=useState(monthStart(_initialDate));
   const [showBlockForm,setShowBlockForm]=useState(false);
   const [editingBlock,setEditingBlock]=useState(null);
   const [blockForm,setBlockForm]=useState({label:"",startDate:today(),endDate:today(),notes:""});
   const [shiftDraft,setShiftDraft]=useState({});
-  const items=scheduleItems(plan,schedule,logs);
   const monthItems=items.filter(i=>monthKey(i.date)===monthKey(viewMonth));
   const monthEffortByDate=monthItems.reduce((acc,i)=>{
     const effort=itemEffort(i).value;
@@ -820,20 +1253,26 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
   const maxEffort=Math.max(1,...Object.values(monthEffortByDate));
   const selectedItems=items.filter(i=>i.date===selected);
   const selectedBlocks=travelBlocksOnDate(schedule,selected);
-  const upcomingOpen=items.filter(i=>i.date>=selected && (!i.log || i.log.status==="skip")).slice(0,3);
+  const upcomingOpen=items.filter(i=>i.date>=selected && isOpenLog(i.log)).slice(0,3);
   const first=new Date(`${viewMonth}T12:00:00`);
   const gridStart=addDays(viewMonth,-first.getDay());
   const days=Array.from({length:42},(_,i)=>addDays(gridStart,i));
 
   const shiftSession=(key,date)=>{
-    setSchedule(s=>({...s,sessionOverrides:{...(s.sessionOverrides||{}),[key]:date}}));
+    setSchedule(s=>({...s,sessionOverrides:{...(s.sessionOverrides||{}),[key]:date},lastRescheduleUndo:null}));
   };
   const resetSession=(key)=>{
     setSchedule(s=>{
       const next={...(s.sessionOverrides||{})};
       delete next[key];
-      return {...s,sessionOverrides:next};
+      return {...s,sessionOverrides:next,lastRescheduleUndo:null};
     });
+  };
+  const applyCascade=(cascade)=>{
+    setSchedule(s=>applyCascadeToSchedule(s,cascade));
+  };
+  const undoCascade=()=>{
+    setSchedule(s=>undoLastReschedule(s));
   };
   const editBlock=(block,index)=>{
     setEditingBlock(index);
@@ -858,12 +1297,12 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
       const blocks=[...(s.travelBlocks||[])];
       if(editingBlock==null) blocks.push(block);
       else blocks[editingBlock]=block;
-      return {...s,travelBlocks:blocks};
+      return {...s,travelBlocks:blocks,lastRescheduleUndo:null};
     });
     closeBlockForm();
   };
   const deleteBlock=(index)=>{
-    setSchedule(s=>({...s,travelBlocks:(s.travelBlocks||[]).filter((_,i)=>i!==index)}));
+    setSchedule(s=>({...s,travelBlocks:(s.travelBlocks||[]).filter((_,i)=>i!==index),lastRescheduleUndo:null}));
     closeBlockForm();
   };
   const monthLabel=new Date(`${viewMonth}T12:00:00`).toLocaleDateString(undefined,{month:"long",year:"numeric"});
@@ -892,7 +1331,7 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
           {days.map(date=>{
             const dayItems=items.filter(i=>i.date===date);
             const blocks=travelBlocksOnDate(schedule,date);
-            const conflicts=dayItems.some(i=>i.travel && (!i.log || i.log.status==="skip"));
+            const conflicts=dayItems.some(i=>i.travel && isOpenLog(i.log));
             const attempts=dayItems.reduce((sum,i)=>sum+attemptStats(i.log).count,0);
             const effort=monthEffortByDate[date]||0;
             const effortPct=Math.min(1,effort/maxEffort);
@@ -927,6 +1366,15 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
           <div className="disp" style={{fontSize:16,color:"var(--rope)"}}>{fmtFullDate(selected)}</div>
           <div className="mono" style={{fontSize:11,color:"var(--faint)"}}>Agenda</div>
         </div>
+        {schedule.lastRescheduleUndo?.changes?.length>0 && (
+          <div style={{border:"1px solid var(--rope-soft)",borderRadius:10,padding:10,background:"var(--granite)",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+            <div>
+              <div className="disp" style={{fontSize:13,color:"var(--rope)"}}>{schedule.lastRescheduleUndo.reason || "Reschedule"} applied</div>
+              <div style={{fontSize:12,color:"var(--chalk-dim)",marginTop:2}}>{schedule.lastRescheduleUndo.changes.length} workout{schedule.lastRescheduleUndo.changes.length===1?"":"s"} moved.</div>
+            </div>
+            <button className="btn btn-ghost" style={{padding:"7px 10px",fontSize:12,whiteSpace:"nowrap"}} onClick={undoCascade}>Undo reschedule</button>
+          </div>
+        )}
 
         {selectedBlocks.length>0 && (
           <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
@@ -972,9 +1420,11 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
           const effort=itemEffort(i);
           const stats=attemptStats(i.log);
           const candidates=nextUnblockedDates(schedule,i.date,3);
-          const open=!i.log || i.log.status==="skip";
+          const open=isOpenLog(i.log);
+          const cascade=i.travel && open ? buildRescheduleCascade(plan,schedule,logs,i.key,`${i.travel.label||"Blocker"} reschedule`) : null;
+          const surface=workoutSurfaceStyle(i);
           return (
-            <div key={i.key} style={{borderTop:"1px solid var(--line)",padding:"12px 0"}}>
+            <div key={i.key} style={{...surface,border:`1px solid ${i.travel&&open?"var(--deload)":"var(--line)"}`,borderRadius:10,padding:12,marginTop:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                 <div style={{flex:1}}>
                   <div className="disp" style={{fontSize:14}}>{`W${i.week} ${sessionTitle(i.session)}`}</div>
@@ -989,7 +1439,15 @@ function CalendarView({ plan, schedule, setSchedule, logs, onOpenSession }){
               </div>
               {i.travel && open && (
                 <div style={{marginTop:10,border:"1px solid var(--deload)",borderRadius:10,padding:10,background:"var(--granite)"}}>
-                  <div style={{fontSize:12,color:"var(--deload)",marginBottom:8}}>{i.travel.label||"Blocker"} overlaps this workout. Shift it manually when useful.</div>
+                  <div style={{fontSize:12,color:"var(--deload)",marginBottom:8}}>{i.travel.label||"Blocker"} overlaps this workout. Cascade it forward or fine-tune manually.</div>
+                  {cascade && (
+                    <div style={{border:"1px solid var(--line)",borderRadius:9,padding:9,marginBottom:8,background:"var(--surface)"}}>
+                      <div style={{fontSize:12,color:"var(--chalk-dim)",lineHeight:1.4,marginBottom:7}}>
+                        Move {cascade.moved.length} workout{cascade.moved.length===1?"":"s"}: {cascade.moved.slice(0,3).map(m=>`W${m.week} ${sessionTitle(m.session)} to ${fmtDay(m.toDate)}`).join(", ")}{cascade.moved.length>3?"...":""}
+                      </div>
+                      <button className="btn btn-rope" style={{padding:"7px 10px",fontSize:12}} onClick={()=>applyCascade(cascade)}>Apply cascade</button>
+                    </div>
+                  )}
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {candidates.map(d=>(
                       <button key={d} className="btn btn-ghost" style={{padding:"6px 9px",display:"flex",alignItems:"center",gap:5,fontSize:12}} onClick={()=>shiftSession(i.key,d)}><MoveRight size={13}/>{fmtDay(d)}</button>
@@ -1062,6 +1520,288 @@ function AuthScreen({ email, setEmail, password, setPassword, message, onSubmit 
   );
 }
 
+/* ============================ CYCLE LOGIC ============================ */
+function isPlanComplete(planWeeks, logs){
+  if(!planWeeks||!planWeeks.length) return false;
+  const last=planWeeks[planWeeks.length-1];
+  return last.sessions.every(s=>{
+    const l=logs[logKey(last.week,s.id)];
+    return l&&(l.status==="Y"||l.status==="partial");
+  });
+}
+function computeCycleSummary(planWeeks, logs, metrics){
+  const scheduled=planWeeks.reduce((n,w)=>n+w.sessions.length,0);
+  const done=Object.values(logs).filter(l=>l.status==="Y"||l.status==="partial").length;
+  const pu=metrics.filter(m=>m.pullups!=null);
+  const fl=metrics.filter(m=>m.flash!=null);
+  return {
+    totalSessionsDone:done, totalSessionsScheduled:scheduled,
+    adherencePct:scheduled>0?Math.round((done/scheduled)*100):0,
+    pullupStart:pu[0]?.pullups??null, pullupEnd:pu[pu.length-1]?.pullups??null,
+    flashStart:fl[0]?.flash??null, flashEnd:fl[fl.length-1]?.flash??null,
+    projectEnd:[...metrics].reverse().find(m=>m.project!=null)?.project??null,
+    painSessions:Object.values(logs).filter(l=>l.pain).length,
+  };
+}
+function archiveActiveCycle(appData, chosenTemplateId, newStartDate){
+  const ac=appData.activeCycle;
+  const summary=computeCycleSummary(ac.plan.weeks,ac.logs,ac.metrics);
+  const archived={ ...ac, completedAt:nowIso(), summary };
+  const tpl=PLAN_TEMPLATES[chosenTemplateId];
+  const newCycle={
+    cycleId:`cycle_${Date.now()}`,
+    cycleNumber:(appData.completedCycles.length||0)+2,
+    planTemplateId:chosenTemplateId,
+    plan:tpl.plan,
+    logs:{}, metrics:[],
+    schedule:{ ...ac.schedule, startDate:newStartDate, travelBlocks:[], sessionOverrides:{} },
+    startedAt:new Date(`${newStartDate}T12:00:00`).toISOString(),
+    completedAt:null,
+  };
+  return { ...appData, activeCycle:newCycle, completedCycles:[...appData.completedCycles,archived] };
+}
+
+/* ============================ STAT BOX ============================ */
+function StatBox({ label, value, sub }){
+  return (
+    <div style={{background:"var(--granite)",borderRadius:12,padding:"12px 14px"}}>
+      <div className="disp" style={{fontSize:22,fontWeight:800,lineHeight:1,marginBottom:4}}>{value}</div>
+      <div style={{fontSize:11,color:"var(--rope)",letterSpacing:".04em",textTransform:"uppercase",marginBottom:3}}>{label}</div>
+      {sub&&<div style={{fontSize:11,color:"var(--faint)"}}>{sub}</div>}
+    </div>
+  );
+}
+
+/* ============================ CHECKPOINT PROMPT ============================ */
+function CheckpointPrompt({ week, onSave, onDismiss }){
+  const [pullups,setPullups]=useState("");
+  const [flash,setFlash]=useState("");
+  const accent=week.type==="test"?"var(--test)":"var(--deload)";
+  return (
+    <div className="card fadein" style={{padding:15,marginBottom:14,borderColor:accent}}>
+      <div className="disp" style={{fontSize:14,color:accent,marginBottom:6}}>
+        End of Block — Week {week.week} {week.type==="test"?"test":"deload"} complete
+      </div>
+      <p style={{fontSize:13,color:"var(--chalk-dim)",margin:"0 0 12px",lineHeight:1.5}}>
+        Log your checkpoint metrics now to track progress across the plan.
+      </p>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+        <Field label="Max pull-ups">
+          <input className="tinput" type="number" min={0} max={60} placeholder="—" value={pullups}
+            onChange={e=>setPullups(e.target.value)}/>
+        </Field>
+        <Field label="Flash grade">
+          <select className="tinput" value={flash} onChange={e=>setFlash(e.target.value)}>
+            <option value="">—</option>
+            {[0,1,2,3,4,5].map(v=><option key={v} value={v}>V{v}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn btn-rope" style={{flex:1,padding:10}} onClick={()=>{
+          onSave({ week:week.week, date:today(), pullups:pullups?+pullups:null, flash:flash!==""?+flash:null, project:null, sleep:null, pain:"" });
+          onDismiss();
+        }}>Save checkpoint</button>
+        <button className="btn btn-ghost" style={{padding:10}} onClick={onDismiss}>Skip</button>
+      </div>
+    </div>
+  );
+}
+
+/* ============================ PLAN COMPLETION MODAL ============================ */
+const LEVEL_COLOR={ beginner:"var(--moss)", intermediate:"var(--rope)", advanced:"var(--deload)" };
+
+function PlanCompletionModal({ plan, logs, metrics, schedule, completedCycles, onStart, onClose }){
+  const [stage,setStage]=useState("celebration");
+  const [selectedTpl,setSelectedTpl]=useState(null);
+  const [startDate,setStartDate]=useState(today());
+  const summary=computeCycleSummary(plan.weeks,logs,metrics);
+  const lastFlash=[...metrics].reverse().find(m=>m.flash!=null)?.flash??null;
+  const lastPullups=[...metrics].reverse().find(m=>m.pullups!=null)?.pullups??null;
+
+  return (
+    <div className="ct-root" style={{position:"fixed",inset:0,zIndex:75,overflowY:"auto"}}>
+      <style>{STYLE}</style>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 80px"}}>
+
+        {stage==="celebration" && (
+          <div className="fadein stagger">
+            <div style={{textAlign:"center",marginBottom:28,paddingTop:20}}>
+              <div style={{width:64,height:64,borderRadius:18,background:"var(--rope)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}>
+                <Award size={36} color="#1a120c"/>
+              </div>
+              <h1 className="disp" style={{fontSize:28,fontWeight:800,margin:"0 0 6px"}}>Plan complete!</h1>
+              <div style={{color:"var(--chalk-dim)",fontSize:15}}>{plan.name}</div>
+            </div>
+            <div className="card" style={{padding:16,marginBottom:16}}>
+              <div className="disp" style={{fontSize:12,color:"var(--rope)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:12}}>Your results</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <StatBox label="Sessions done" value={`${summary.totalSessionsDone}/${summary.totalSessionsScheduled}`} sub={`${summary.adherencePct}% adherence`}/>
+                <StatBox label="Pull-up change"
+                  value={summary.pullupStart!=null&&summary.pullupEnd!=null?`${summary.pullupEnd>=summary.pullupStart?"+":""}${summary.pullupEnd-summary.pullupStart}`:"—"}
+                  sub={summary.pullupStart!=null?`${summary.pullupStart} → ${summary.pullupEnd??summary.pullupStart}`:"Not logged"}/>
+                <StatBox label="Flash grade"
+                  value={summary.flashEnd!=null?`V${summary.flashEnd}`:"—"}
+                  sub={summary.flashStart!=null&&summary.flashEnd!=null&&summary.flashStart!==summary.flashEnd?`Was V${summary.flashStart}`:summary.flashStart!=null?`Started V${summary.flashStart}`:"Not logged"}/>
+                <StatBox label="Pain sessions" value={summary.painSessions} sub={summary.painSessions===0?"Pain-free run!":"Sessions flagged"}/>
+              </div>
+            </div>
+            <button className="btn btn-rope" style={{width:"100%",padding:14,fontSize:16,marginBottom:10}} onClick={()=>setStage("picking-plan")}>
+              Choose your next plan
+            </button>
+            <button className="btn btn-ghost" style={{width:"100%",padding:12}} onClick={()=>{setSelectedTpl("foundation-12wk");setStage("confirming");}}>
+              Restart this plan
+            </button>
+          </div>
+        )}
+
+        {stage==="picking-plan" && (
+          <div className="fadein stagger">
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+              <button className="btn btn-ghost" style={{padding:8}} onClick={()=>setStage("celebration")}><ChevronLeft size={16}/></button>
+              <h2 className="disp" style={{fontSize:22,margin:0}}>Choose next plan</h2>
+            </div>
+            <div className="card" style={{padding:14,marginBottom:16}}>
+              <div style={{fontSize:12,color:"var(--faint)",marginBottom:8}}>Carries forward to your new plan</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {lastPullups!=null&&<span className="pill" style={{background:"var(--surface2)",color:"var(--chalk)"}}>{lastPullups} pull-ups baseline</span>}
+                {lastFlash!=null&&<span className="pill" style={{background:"var(--surface2)",color:"var(--chalk)"}}>V{lastFlash} flash grade</span>}
+                <span className="pill" style={{background:"var(--surface2)",color:"var(--chalk)"}}>Your climbing pyramid</span>
+                <span className="pill" style={{background:"var(--surface2)",color:"var(--chalk)"}}>Session day preferences</span>
+              </div>
+            </div>
+            {Object.values(PLAN_TEMPLATES).map(t=>(
+              <div key={t.id} className="card" style={{padding:16,marginBottom:12,cursor:"pointer",borderColor:selectedTpl===t.id?"var(--rope)":"var(--line)"}} onClick={()=>setSelectedTpl(t.id)}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                  <strong className="disp" style={{fontSize:16}}>{t.name}</strong>
+                  <span className="pill" style={{background:"var(--surface2)",color:LEVEL_COLOR[t.level]||"var(--chalk)"}}>{t.level}</span>
+                </div>
+                <div style={{fontSize:13,color:"var(--chalk-dim)",marginBottom:8}}>{t.subtitle}</div>
+                <div style={{fontSize:12,color:"var(--faint)"}}>{t.targetGrades} · {t.phases.join(" → ")}</div>
+                {selectedTpl===t.id&&(
+                  <button className="btn btn-rope" style={{width:"100%",padding:10,marginTop:12}} onClick={e=>{e.stopPropagation();setStage("confirming");}}>
+                    Select this plan →
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {stage==="confirming" && selectedTpl && (()=>{
+          const t=PLAN_TEMPLATES[selectedTpl];
+          return (
+            <div className="fadein stagger">
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+                <button className="btn btn-ghost" style={{padding:8}} onClick={()=>setStage("picking-plan")}><ChevronLeft size={16}/></button>
+                <h2 className="disp" style={{fontSize:22,margin:0}}>Confirm & start</h2>
+              </div>
+              <div className="card" style={{padding:16,marginBottom:14}}>
+                <strong className="disp" style={{fontSize:18,display:"block",marginBottom:4}}>{t.name}</strong>
+                <div style={{fontSize:13,color:"var(--chalk-dim)",marginBottom:10}}>{t.subtitle}</div>
+                <div style={{fontSize:12,color:"var(--faint)"}}>{t.phases.join(" → ")}</div>
+              </div>
+              <div className="card" style={{padding:14,marginBottom:16}}>
+                <Field label="Start date">
+                  <input className="tinput" type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/>
+                </Field>
+              </div>
+              <button className="btn btn-rope" style={{width:"100%",padding:14,fontSize:16,marginBottom:10}} onClick={()=>onStart(selectedTpl,startDate)}>
+                Start {t.name}
+              </button>
+              <button className="btn btn-ghost" style={{width:"100%",padding:12}} onClick={onClose}>
+                Continue reviewing results
+              </button>
+            </div>
+          );
+        })()}
+
+      </div>
+    </div>
+  );
+}
+
+/* ============================ CYCLE HISTORY VIEW ============================ */
+function CycleHistoryView({ completedCycles, onClose }){
+  const [expanded,setExpanded]=useState(null);
+  return (
+    <div className="ct-root" style={{position:"fixed",inset:0,zIndex:60,overflowY:"auto"}}>
+      <style>{STYLE}</style>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 60px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+          <button className="btn btn-ghost" style={{padding:8}} onClick={onClose}><ChevronLeft size={16}/></button>
+          <h2 className="disp" style={{fontSize:22,margin:0}}>Training history</h2>
+        </div>
+        {!completedCycles.length && (
+          <div style={{color:"var(--chalk-dim)",fontSize:14,textAlign:"center",marginTop:60,lineHeight:1.6}}>
+            No completed cycles yet.<br/>Finish your first plan to see your history here.
+          </div>
+        )}
+        {[...completedCycles].reverse().map(cycle=>{
+          const s=cycle.summary||{};
+          const t=PLAN_TEMPLATES[cycle.planTemplateId];
+          const startStr=cycle.startedAt?new Date(cycle.startedAt).toLocaleDateString(undefined,{month:"short",year:"numeric"}):"?";
+          const endStr=cycle.completedAt?new Date(cycle.completedAt).toLocaleDateString(undefined,{month:"short",year:"numeric"}):"?";
+          const isOpen=expanded===cycle.cycleId;
+          return (
+            <div key={cycle.cycleId} className="card" style={{padding:16,marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div>
+                  <div className="disp" style={{fontSize:16,fontWeight:700}}>Cycle {cycle.cycleNumber} — {t?.name||cycle.planTemplateId}</div>
+                  <div style={{fontSize:12,color:"var(--faint)",marginTop:2}}>{startStr} → {endStr}</div>
+                </div>
+                <button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:12}} onClick={()=>setExpanded(isOpen?null:cycle.cycleId)}>
+                  {isOpen?"Hide":"Expand"}
+                </button>
+              </div>
+              <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                {s.totalSessionsDone!=null&&<span style={{fontSize:12,color:"var(--chalk-dim)"}}>{s.totalSessionsDone}/{s.totalSessionsScheduled} sessions ({s.adherencePct}%)</span>}
+                {s.pullupStart!=null&&s.pullupEnd!=null&&<span style={{fontSize:12,color:"var(--moss)"}}>{s.pullupEnd>=s.pullupStart?"+":""}{s.pullupEnd-s.pullupStart} pull-ups</span>}
+                {s.flashEnd!=null&&<span style={{fontSize:12,color:"var(--chalk-dim)"}}>V{s.flashEnd} flash{s.flashStart!=null&&s.flashStart!==s.flashEnd?` (was V${s.flashStart})`:""}</span>}
+                {s.projectEnd!=null&&<span style={{fontSize:12,color:"var(--chalk-dim)"}}>V{s.projectEnd} proj</span>}
+              </div>
+              {isOpen&&(
+                <div className="fadein" style={{marginTop:14}}>
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:11,color:"var(--faint)",marginBottom:8,letterSpacing:".04em",textTransform:"uppercase"}}>Weekly completion</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {(cycle.plan?.weeks||[]).map(w=>(
+                        <div key={w.week} style={{textAlign:"center"}}>
+                          <div style={{fontSize:9,color:"var(--faint)",marginBottom:2}}>W{w.week}</div>
+                          <div style={{display:"flex",gap:2}}>
+                            {w.sessions.map(s=>{
+                              const l=(cycle.logs||{})[logKey(w.week,s.id)];
+                              const dot=l?.status==="Y"?"var(--moss)":l?.status==="partial"?"var(--rope)":l?.status==="skip"?"var(--surface2)":"var(--line)";
+                              return <div key={s.id} style={{width:7,height:7,borderRadius:"50%",background:dot}}/>;
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {(cycle.metrics||[]).filter(m=>m.pullups!=null||m.flash!=null).length>0&&(
+                    <div>
+                      <div style={{fontSize:11,color:"var(--faint)",marginBottom:8,letterSpacing:".04em",textTransform:"uppercase"}}>Metrics logged</div>
+                      {(cycle.metrics||[]).filter(m=>m.pullups!=null||m.flash!=null).map((m,i)=>(
+                        <div key={i} style={{display:"flex",gap:12,fontSize:12,color:"var(--chalk-dim)",padding:"4px 0",borderTop:"1px solid var(--line)"}}>
+                          <span style={{color:"var(--faint)",minWidth:40}}>Wk {m.week}</span>
+                          {m.pullups!=null&&<span>{m.pullups} pull-ups</span>}
+                          {m.flash!=null&&<span>V{m.flash} flash</span>}
+                          {m.project!=null&&<span>V{m.project} proj</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ============================ APP ============================ */
 export default function App(){
   const [plan,setPlan]=useState(DEFAULT_PLAN);
@@ -1069,6 +1809,11 @@ export default function App(){
   const [metrics,setMetrics]=useState([]);
   const [schedule,setSchedule]=useState({ ...DEFAULT_SCHEDULE, startDate: today() });
   const [settings,setSettings]=useState(DEFAULT_SETTINGS);
+  const [completedCycles,setCompletedCycles]=useState([]);
+  const [cycleMeta,setCycleMeta]=useState({ cycleId:`cycle_${Date.now()}`, cycleNumber:1, planTemplateId:"foundation-12wk", startedAt:nowIso(), completedAt:null });
+  const [completionModal,setCompletionModal]=useState(null);
+  const [showHistory,setShowHistory]=useState(false);
+  const [dismissedCheckpoints,setDismissedCheckpoints]=useState([]);
   const [dataUpdatedAt,setDataUpdatedAt]=useState(null);
   const [loaded,setLoaded]=useState(false);
   const [authReady,setAuthReady]=useState(!isCloudConfigured);
@@ -1091,13 +1836,17 @@ export default function App(){
   const currentAppData=()=>({
     schemaVersion:SCHEMA_VERSION,
     updatedAt:dataUpdatedAt || nowIso(),
-    plan, logs, metrics, sends, schedule, settings,
+    activeCycle:{ ...cycleMeta, plan, logs, metrics, schedule },
+    completedCycles, sends, settings,
   });
   const applyAppData=(data)=>{
-    const normalized=normalizeAppData(data);
-    setPlan(normalized.plan); setLogs(normalized.logs); setMetrics(normalized.metrics); setSends(normalized.sends);
-    setSchedule(normalized.schedule); setSettings(normalized.settings); setDataUpdatedAt(normalized.updatedAt);
-    setCurWeek(currentScheduleState(normalized.plan,normalized.schedule,normalized.logs).currentWeek);
+    const n=normalizeAppData(data);
+    const ac=n.activeCycle;
+    setPlan(ac.plan); setLogs(ac.logs); setMetrics(ac.metrics); setSchedule(ac.schedule);
+    setSends(n.sends); setSettings(n.settings); setDataUpdatedAt(n.updatedAt);
+    setCompletedCycles(n.completedCycles);
+    setCycleMeta({ cycleId:ac.cycleId, cycleNumber:ac.cycleNumber, planTemplateId:ac.planTemplateId, startedAt:ac.startedAt, completedAt:ac.completedAt });
+    setCurWeek(currentScheduleState(ac.plan,ac.schedule,ac.logs).currentWeek);
   };
   const pushCloudData=async(data)=>{
     if(!isCloudConfigured || !session?.user) return;
@@ -1124,6 +1873,16 @@ export default function App(){
     applyAppData(data);
     setLoaded(true);
   },[]);
+  // Auto-open completion modal once on first load when plan is done.
+  // After dismissal the Today tab banner is the persistent re-entry point.
+  const shownCompletionOnLoad=useRef(false);
+  useEffect(()=>{
+    if(!loaded||shownCompletionOnLoad.current) return;
+    if(Object.keys(logs).length>0 && isPlanComplete(plan.weeks,logs)){
+      shownCompletionOnLoad.current=true;
+      setCompletionModal("celebration");
+    }
+  },[loaded]);
   useEffect(()=>{
     if(!isCloudConfigured){
       setAuthReady(true);
@@ -1182,7 +1941,7 @@ export default function App(){
     }
     const saved=saveAppData(next);
     queueCloudSave(saved);
-  },[plan,logs,metrics,sends,schedule,settings,loaded]);
+  },[plan,logs,metrics,sends,schedule,settings,completedCycles,cycleMeta,loaded]);
   useEffect(()=>{
     if(typeof window === "undefined") return;
     const online=()=>{ if(session?.user) queueCloudSave(loadAppData()); };
@@ -1203,7 +1962,38 @@ export default function App(){
   const schedState=currentScheduleState(plan,schedule,logs);
   const combinedSends=addSendMaps(sends,sendsFromLogs(logs));
 
-  const saveLog=(wk,sid,data)=>{ setLogs(p=>({...p,[logKey(wk,sid)]:normalizeLog(data)})); setRunner(null); };
+  const saveLog=(wk,sid,data)=>{
+    const key=logKey(wk,sid);
+    const wasSkipped=logs[key]?.status==="skip";
+    let shouldReschedule=false;
+    let logData=data;
+    if(data.status==="skip"){
+      if(!wasSkipped){
+        shouldReschedule=typeof window !== "undefined" && window.confirm("Treat this skipped workout as an unplanned rest and reschedule it? Choose Cancel to drop it from the plan.");
+        logData={...data,skipAction:shouldReschedule?"reschedule":"drop"};
+      } else {
+        logData={...data,skipAction:logs[key]?.skipAction || "reschedule"};
+      }
+    }
+    const nextLogs={...logs,[key]:normalizeLog(logData)};
+    setLogs(nextLogs);
+    if(shouldReschedule){
+      setSchedule(s=>{
+        const cascade=buildRescheduleCascade(plan,s,nextLogs,key,"Unplanned rest reschedule");
+        return cascade ? applyCascadeToSchedule(s,cascade) : s;
+      });
+    }
+    setRunner(null);
+    if(!completionModal && isPlanComplete(plan.weeks,nextLogs)){
+      setTimeout(()=>setCompletionModal("celebration"),400);
+    }
+  };
+  const archiveAndStartNewCycle=(templateId,startDate)=>{
+    const newData=archiveActiveCycle(currentAppData(),templateId,startDate);
+    applyAppData(newData);
+    setCompletionModal(null);
+    setTab("today");
+  };
   const openCalendarSession=(item)=>{
     setCurWeek(item.week);
     setRunner({week:item.week,session:item.session});
@@ -1300,28 +2090,57 @@ export default function App(){
           const rDone=weekRoutineDone(wk,curWeek,logs);
           const rKeys=Object.keys(rTargets);
           const travelToday=activeTravelBlock(schedule,today());
+          const checkpointWeek=plan.weeks.find(w=>
+            (w.type==="deload"||w.type==="test") &&
+            w.sessions.every(s=>{const l=logs[logKey(w.week,s.id)];return l&&(l.status==="Y"||l.status==="partial"||l.status==="skip");}) &&
+            !metrics.some(m=>m.week===w.week) &&
+            !dismissedCheckpoints.includes(w.week)
+          );
+          const planDone=isPlanComplete(plan.weeks,logs);
           return (
           <div className="stagger">
-            <div className="card" style={{padding:15,marginBottom:14,borderColor:schedState.due.length?"var(--rope)":schedState.overdue.length?"var(--deload)":"var(--line)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,marginBottom:9}}>
-                <div className="disp" style={{fontSize:15,color:"var(--rope)"}}>Today</div>
-                <button className="btn btn-ghost" style={{padding:"5px 9px",fontSize:12}} onClick={()=>setManage(true)}>Schedule</button>
-              </div>
-              <div style={{fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>
-                {schedState.due.length>0 ? (
-                  <>Due now: {schedState.due.map(i=>`W${i.week} ${sessionTitle(i.session)}`).join(", ")}.</>
-                ) : schedState.overdue.length>0 ? (
-                  <>Overdue: {schedState.overdue.slice(0,2).map(i=>`W${i.week} ${sessionTitle(i.session)} (${fmtFullDate(i.date)})`).join(", ")}.</>
-                ) : schedState.upcoming ? (
-                  <>Next up: W{schedState.upcoming.week} {sessionTitle(schedState.upcoming.session)} on {fmtFullDate(schedState.upcoming.date)}.</>
-                ) : <>All scheduled sessions are logged.</>}
-              </div>
-              {travelToday && (
-                <div style={{marginTop:10,padding:"9px 10px",borderRadius:10,background:"var(--granite)",border:"1px solid var(--deload)",fontSize:13,color:"var(--chalk-dim)"}}>
-                  {travelToday.label || "Travel block"} is active today. Treat this as a prompt to go lighter, slide sessions, or use deload-style climbing.
+            {planDone ? (
+              <div className="card fadein" style={{padding:18,marginBottom:14,borderColor:"var(--moss)",background:"linear-gradient(135deg,var(--surface),var(--granite2))"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:"var(--moss)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <Award size={20} color="#1a120c"/>
+                  </div>
+                  <div>
+                    <div className="disp" style={{fontSize:16,fontWeight:800,lineHeight:1.2}}>{plan.name} — complete</div>
+                    <div style={{fontSize:12,color:"var(--chalk-dim)",marginTop:2}}>Time to pick your next plan.</div>
+                  </div>
                 </div>
-              )}
-            </div>
+                <button className="btn btn-rope" style={{width:"100%",padding:11,fontSize:14}} onClick={()=>setCompletionModal("celebration")}>
+                  View results &amp; start next plan
+                </button>
+              </div>
+            ) : (
+              <>
+                {checkpointWeek&&<CheckpointPrompt week={checkpointWeek}
+                  onSave={entry=>setMetrics(m=>[...m.filter(x=>x.week!==entry.week),entry].sort((a,b)=>a.week-b.week))}
+                  onDismiss={()=>setDismissedCheckpoints(d=>[...d,checkpointWeek.week])}/>}
+                <div className="card" style={{padding:15,marginBottom:14,borderColor:schedState.due.length?"var(--rope)":schedState.overdue.length?"var(--deload)":"var(--line)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,marginBottom:9}}>
+                    <div className="disp" style={{fontSize:15,color:"var(--rope)"}}>Today</div>
+                    <button className="btn btn-ghost" style={{padding:"5px 9px",fontSize:12}} onClick={()=>setManage(true)}>Schedule</button>
+                  </div>
+                  <div style={{fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>
+                    {schedState.due.length>0 ? (
+                      <>Due now: {schedState.due.map(i=>`W${i.week} ${sessionTitle(i.session)}`).join(", ")}.</>
+                    ) : schedState.overdue.length>0 ? (
+                      <>Overdue: {schedState.overdue.slice(0,2).map(i=>`W${i.week} ${sessionTitle(i.session)} (${fmtFullDate(i.date)})`).join(", ")}.</>
+                    ) : schedState.upcoming ? (
+                      <>Next up: W{schedState.upcoming.week} {sessionTitle(schedState.upcoming.session)} on {fmtFullDate(schedState.upcoming.date)}.</>
+                    ) : <>All scheduled sessions are logged.</>}
+                  </div>
+                  {travelToday && (
+                    <div style={{marginTop:10,padding:"9px 10px",borderRadius:10,background:"var(--granite)",border:"1px solid var(--deload)",fontSize:13,color:"var(--chalk-dim)"}}>
+                      {travelToday.label || "Travel block"} is active today. Treat this as a prompt to go lighter, slide sessions, or use deload-style climbing.
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
             {/* WEEK HERO */}
             <div className="card" style={{padding:0,marginBottom:14,overflow:"hidden"}}>
               <div style={{padding:"16px 16px 15px",borderLeft:`4px solid ${accent}`}}>
@@ -1405,8 +2224,10 @@ export default function App(){
               const log=logs[`${curWeek}-${s.id}`];
               const sDate=scheduledDate(schedule,curWeek,s.id);
               const sTravel=activeTravelBlock(schedule,sDate);
+              const item={ week:curWeek, phase:wk.phase, type:wk.type, session:s, log };
+              const surface=workoutSurfaceStyle(item);
               return (
-                <div key={s.id} className="card" style={{padding:15,marginBottom:11,
+                <div key={s.id} className="card" style={{...surface,padding:15,marginBottom:11,
                   borderLeft:`3px solid ${sTravel?"var(--deload)":wk.type==="deload"?"var(--deload)":wk.type==="test"?"var(--test)":"var(--line)"}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                     <div style={{flex:1}}>
@@ -1480,8 +2301,11 @@ export default function App(){
                   <strong className="disp">Week {w.week} <span style={{color:"var(--faint)",fontWeight:500,fontSize:13}}>· {w.phase}</span></strong>
                   {w.type!=="normal" && <span className="pill" style={{background:"var(--surface2)",color:PHASE_COLOR[w.type]}}>{w.type}</span>}
                 </div>
-                {w.sessions.map((s,si)=>(
-                  <div key={s.id} style={{padding:"7px 0",borderTop:si?"1px solid var(--line)":"none"}}>
+                {w.sessions.map((s,si)=>{
+                  const log=logs[`${w.week}-${s.id}`];
+                  const surface=workoutSurfaceStyle({ week:w.week, phase:w.phase, type:w.type, session:s, log });
+                  return (
+                  <div key={s.id} style={{...surface,padding:"9px 10px",border:`1px solid ${si?"var(--line)":"transparent"}`,borderRadius:9,marginTop:si?7:0}}>
                     <div style={{fontSize:11,color:"var(--faint)",textTransform:"uppercase",letterSpacing:".04em"}}>{s.day}</div>
                     {edit ? (
                       <textarea className="tinput" rows={2} value={s.focus} style={{marginTop:4,fontSize:13}}
@@ -1500,7 +2324,7 @@ export default function App(){
                       </div>
                     )}
                   </div>
-                ))}
+                );})}
               </div>
             ))}
           </div>
@@ -1510,7 +2334,7 @@ export default function App(){
         {tab==="calendar" && <CalendarView plan={plan} schedule={schedule} setSchedule={setSchedule} logs={logs} onOpenSession={openCalendarSession}/>}
 
         {/* ===== METRICS ===== */}
-        {tab==="metrics" && <Metrics metrics={metrics} setMetrics={setMetrics} planLen={plan.weeks.length}/>}
+        {tab==="metrics" && <Metrics metrics={metrics} setMetrics={setMetrics} logs={logs} plan={plan} onEditLog={({week,session})=>setRunner({week,session})} planLen={plan.weeks.length} onShowHistory={()=>setShowHistory(true)} hasHistory={completedCycles.length>0}/>}
 
         {/* ===== LIBRARY ===== */}
         {tab==="library" && <Library/>}
@@ -1527,8 +2351,9 @@ export default function App(){
         </div>
       </div>
 
-      {manage && <Manage data={{ schemaVersion:SCHEMA_VERSION, updatedAt:dataUpdatedAt, plan, logs, metrics, sends, schedule, settings }}
-        onReplace={replaceAppData} setPlan={setPlan} setSchedule={setSchedule} onClose={()=>setManage(false)}/>}
+      {manage && <Manage data={currentAppData()} onReplace={replaceAppData} setPlan={setPlan} setSchedule={setSchedule} onClose={()=>setManage(false)}/>}
+      {completionModal && <PlanCompletionModal plan={plan} logs={logs} metrics={metrics} schedule={schedule} completedCycles={completedCycles} onStart={archiveAndStartNewCycle} onClose={()=>setCompletionModal(null)}/>}
+      {showHistory && <CycleHistoryView completedCycles={completedCycles} onClose={()=>setShowHistory(false)}/>}
       {drill && <DrillSheet name={drill} onClose={()=>setDrill(null)}/>}
       {routine && <RoutineSheet rkey={routine} week={curWeek} onClose={()=>setRoutine(null)} onDrill={(n)=>setDrill(n)}/>}
     </div>
@@ -1536,35 +2361,92 @@ export default function App(){
 }
 
 /* ============================ METRICS ============================ */
-function Metrics({ metrics, setMetrics, planLen }){
+function Metrics({ metrics, setMetrics, logs, plan, onEditLog, planLen, onShowHistory, hasHistory }){
   const [w,setW]=useState(metrics.length?"" : 1);
   const [pu,setPu]=useState(""); const [fl,setFl]=useState(""); const [pr,setPr]=useState("");
   const [sl,setSl]=useState(""); const [pn,setPn]=useState("");
+  const [editingMetricWeek,setEditingMetricWeek]=useState(null);
   const add=()=>{ if(!w) return;
-    const entry={week:+w,date:today(),pullups:+pu||null,flash:+fl||null,project:+pr||null,sleep:+sl||null,pain:pn};
+    const existing=metrics.find(x=>x.week===+w);
+    const entry={week:+w,date:existing?.date || today(),pullups:+pu||null,flash:+fl||null,project:+pr||null,sleep:+sl||null,pain:pn,amendedAt:existing?nowIso():existing?.amendedAt};
     setMetrics(m=>[...m.filter(x=>x.week!==+w),entry].sort((a,b)=>a.week-b.week));
+    setPu("");setFl("");setPr("");setSl("");setPn("");setEditingMetricWeek(null);
+  };
+  const editMetric=(m)=>{
+    setEditingMetricWeek(m.week);
+    setW(String(m.week));
+    setPu(m.pullups??"");
+    setFl(m.flash??"");
+    setPr(m.project??"");
+    setSl(m.sleep??"");
+    setPn(m.pain??"");
+  };
+  const clearMetricForm=()=>{
+    setEditingMetricWeek(null);
+    setW("");
     setPu("");setFl("");setPr("");setSl("");setPn("");
   };
-  const first=metrics.find(m=>m.pullups!=null);
-  const lastM=[...metrics].reverse().find(m=>m.pullups!=null);
-  const delta=(first&&lastM&&first.week!==lastM.week)?lastM.pullups-first.pullups:null;
-  const pts=metrics.filter(m=>m.pullups!=null);
+  const deleteMetric=()=>{
+    if(!editingMetricWeek) return;
+    setMetrics(m=>m.filter(x=>x.week!==editingMetricWeek));
+    clearMetricForm();
+  };
+  const weeklyStats=weeklyLogStats(logs,planLen);
+  const activeWeeks=weeklyStats.filter(x=>x.completed || x.volume || x.effort || x.pain);
+  const latestWeek=activeWeeks.at(-1);
+  const latestFlash=latestMetricValue(metrics,"flash");
+  const latestProject=latestMetricValue(metrics,"project");
+  const pullDelta=metricDelta(metrics,"pullups");
+  const flashDelta=metricDelta(metrics,"flash");
+  const projectDelta=metricDelta(metrics,"project");
+  const insights=buildMetricInsights(metrics,weeklyStats);
+  const hasLogs=activeWeeks.length>0;
+  const painWeeks=weeklyStats.filter(x=>x.pain>0).map(x=>x.week);
+  const hardestSend=maxKnown(activeWeeks.map(x=>x.hardestSend));
+  const recentLogs=loggedSessionItems(plan,logs).slice(0,8);
 
   return (
     <div className="stagger">
-      <h2 className="disp" style={{fontSize:22,margin:"0 0 12px"}}>Progress Metrics</h2>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <h2 className="disp" style={{fontSize:22,margin:0}}>Progress Metrics</h2>
+        {hasHistory&&<button className="btn btn-ghost" style={{padding:"6px 10px",fontSize:12,display:"flex",gap:5,alignItems:"center"}} onClick={onShowHistory}><History size={14}/>History</button>}
+      </div>
 
-      {delta!=null && (
-        <div className="card" style={{padding:16,marginBottom:14,display:"flex",alignItems:"center",gap:14}}>
-          <div className="disp" style={{fontSize:40,color:delta>=0?"var(--moss)":"var(--rope)",lineHeight:1}}>{delta>=0?"+":""}{delta}</div>
-          <div style={{fontSize:13,color:"var(--chalk-dim)"}}>clean pull-ups gained<br/>since week {first.week}. The bigger gains are in how efficiently you move — they won't show as a number.</div>
-        </div>
-      )}
+      <MetricDashboard metrics={metrics} weeklyStats={weeklyStats} activeWeeks={activeWeeks} latestWeek={latestWeek} latestFlash={latestFlash} latestProject={latestProject} pullDelta={pullDelta} flashDelta={flashDelta} projectDelta={projectDelta} insights={insights} hasLogs={hasLogs} painWeeks={painWeeks} hardestSend={hardestSend} planLen={planLen}/>
 
-      {pts.length>1 && <Spark pts={pts}/>}
+      <MetricSection title="Recent logs">
+        {recentLogs.length===0 ? (
+          <EmptyMetric text="Session logs will appear here after you save workouts."/>
+        ) : (
+          <div className="card" style={{padding:6}}>
+            {recentLogs.map(item=>{
+              const sends=Object.values(item.log.volumeByGrade||{}).reduce((s,n)=>s+(+n||0),0);
+              const attempts=attemptStats(item.log).count;
+              return (
+                <div key={item.key} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"center",padding:"10px",borderBottom:"1px solid var(--line)"}}>
+                  <div>
+                    <div className="disp" style={{fontSize:13,color:"var(--chalk)"}}>W{item.week} {sessionTitle(item.session)}</div>
+                    <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:3}}>{item.log.date?fmtFullDate(item.log.date):"No date"} - RPE {item.log.rpe || "-"} - {sends} sends - {attempts} tries</div>
+                    {item.log.notes && <div style={{fontSize:12,color:"var(--chalk-dim)",marginTop:5,lineHeight:1.35,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.log.notes}</div>}
+                  </div>
+                  <button className="btn btn-ghost" style={{padding:"7px 9px",display:"flex",alignItems:"center",gap:5,fontSize:12}} onClick={()=>onEditLog(item)}><Pencil size={13}/>Edit</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </MetricSection>
 
       <div className="card" style={{padding:15,marginBottom:14}}>
-        <div className="disp" style={{fontSize:14,marginBottom:10,color:"var(--rope)"}}>Log this week's numbers</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginBottom:10}}>
+          <div className="disp" style={{fontSize:14,color:"var(--rope)"}}>{editingMetricWeek?`Amend week ${editingMetricWeek}`:"Log this week's numbers"}</div>
+          {editingMetricWeek && (
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <button className="btn btn-ghost" title="Delete entry" style={{padding:"4px 7px",display:"flex",alignItems:"center",color:"var(--deload)"}} onClick={deleteMetric}><Trash2 size={13}/></button>
+              <button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:12}} onClick={clearMetricForm}>Cancel</button>
+            </div>
+          )}
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <Field label="Week"><select className="tinput" value={w} onChange={e=>setW(e.target.value)}>
             <option value="">—</option>{Array.from({length:planLen},(_,i)=>i+1).map(n=><option key={n} value={n}>Week {n}</option>)}
@@ -1575,20 +2457,23 @@ function Metrics({ metrics, setMetrics, planLen }){
           <Field label="Avg sleep (hrs)"><input className="tinput" inputMode="decimal" value={sl} onChange={e=>setSl(e.target.value)}/></Field>
           <Field label="Pain / niggles"><input className="tinput" value={pn} onChange={e=>setPn(e.target.value)}/></Field>
         </div>
-        <button className="btn btn-rope" style={{width:"100%",padding:11,marginTop:12,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={add}><Plus size={16}/>Save entry</button>
+        <button className="btn btn-rope" style={{width:"100%",padding:11,marginTop:12,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={add}><Plus size={16}/>{editingMetricWeek?"Update entry":"Save entry"}</button>
       </div>
 
       {metrics.length>0 && (
         <div className="card" style={{padding:6}}>
           {metrics.map(m=>(
-            <div key={m.week} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 10px",borderBottom:"1px solid var(--line)"}}>
+            <div key={m.week} style={{display:"grid",gridTemplateColumns:"54px 1fr auto",alignItems:"center",gap:10,padding:"10px 10px",borderBottom:"1px solid var(--line)"}}>
               <div className="disp" style={{width:60,fontSize:13,color:"var(--faint)"}}>Wk {m.week}</div>
               <div className="mono" style={{flex:1,fontSize:13}}>
                 {m.pullups!=null&&<span>{m.pullups} PU&nbsp;&nbsp;</span>}
                 {m.flash!=null&&<span style={{color:"var(--chalk-dim)"}}>V{m.flash} flash&nbsp;&nbsp;</span>}
                 {m.project!=null&&<span style={{color:"var(--chalk-dim)"}}>V{m.project} proj</span>}
               </div>
-              {m.pain && <AlertTriangle size={14} style={{color:"var(--deload)"}}/>}
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                {m.pain && <AlertTriangle size={14} style={{color:"var(--deload)"}}/>}
+                <button className="btn btn-ghost" style={{padding:"5px 7px",display:"flex",alignItems:"center",gap:4,fontSize:11}} onClick={()=>editMetric(m)}><Pencil size={12}/>Edit</button>
+              </div>
             </div>
           ))}
         </div>
@@ -1596,23 +2481,140 @@ function Metrics({ metrics, setMetrics, planLen }){
     </div>
   );
 }
+function MetricDashboard({metrics,weeklyStats,activeWeeks,latestWeek,latestFlash,latestProject,pullDelta,flashDelta,projectDelta,insights,hasLogs,painWeeks,hardestSend,planLen}){
+  return (
+    <>
+      <MetricSection title="Overview">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <MetricCard label="Flash" value={latestFlash!=null?`V${latestFlash}`:"--"} hint={flashDelta?`${fmtSigned(flashDelta.value)} since W${flashDelta.from.week}`:"manual checkpoint"}/>
+          <MetricCard label="Project" value={latestProject!=null?`V${latestProject}`:"--"} hint={projectDelta?`${fmtSigned(projectDelta.value)} since W${projectDelta.from.week}`:"manual checkpoint"}/>
+          <MetricCard label="Pull-ups" value={pullDelta?fmtSigned(pullDelta.value):"--"} hint={pullDelta?`since W${pullDelta.from.week}`:"needs two entries"}/>
+          <MetricCard label="Consistency" value={hasLogs?`${activeWeeks.reduce((s,x)=>s+x.completed,0)}/${planLen*4}`:"--"} hint="sessions logged"/>
+        </div>
+        <div className="card" style={{padding:13,marginTop:8}}>
+          <div className="disp" style={{fontSize:13,color:"var(--rope)",marginBottom:8}}>Coach notes</div>
+          <div style={{display:"grid",gap:8}}>
+            {insights.map((ins,idx)=>(
+              <div key={idx} style={{display:"flex",gap:8,alignItems:"flex-start",fontSize:13,color:"var(--chalk-dim)",lineHeight:1.45}}>
+                {ins.tone==="warn" ? <AlertTriangle size={15} style={{color:"var(--deload)",marginTop:1,flexShrink:0}}/> : <Activity size={15} style={{color:ins.tone==="good"?"var(--moss)":"var(--test)",marginTop:1,flexShrink:0}}/>}
+                <span>{ins.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </MetricSection>
+
+      <MetricSection title="Performance">
+        <CombinedTrendChart metrics={metrics} weeklyStats={weeklyStats}/>
+      </MetricSection>
+
+      <MetricSection title="Load">
+        {!hasLogs ? (
+          <EmptyMetric text="Load, volume, and send stats will appear after sessions are logged."/>
+        ) : (
+          <>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <MetricCard label="Latest volume" value={latestWeek?.volume || 0} hint={latestWeek?`week ${latestWeek.week}`:"no logs"}/>
+              <MetricCard label="Latest effort" value={latestWeek?.effort || 0} hint="RPE weighted"/>
+              <MetricCard label="Sends" value={activeWeeks.reduce((s,x)=>s+x.sends,0)} hint="from session logs"/>
+              <MetricCard label="Hardest send" value={hardestSend!=null?`V${hardestSend}`:"--"} hint="logged volume"/>
+            </div>
+            <div className="card" style={{padding:6}}>
+              {activeWeeks.slice(-6).map(s=>(
+                <div key={s.week} style={{display:"grid",gridTemplateColumns:"48px 1fr auto",gap:10,alignItems:"center",padding:"10px",borderBottom:"1px solid var(--line)"}}>
+                  <div className="disp" style={{fontSize:13,color:"var(--faint)"}}>Wk {s.week}</div>
+                  <div style={{height:7,borderRadius:999,background:"var(--surface2)",overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${Math.min(100,(s.volume/Math.max(1,...activeWeeks.map(x=>x.volume)))*100)}%`,background:"var(--test)"}}/>
+                  </div>
+                  <div className="mono" style={{fontSize:12,color:"var(--chalk-dim)"}}>{s.sends} sends / {s.attempts} tries</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </MetricSection>
+
+      <MetricSection title="Recovery">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <MetricCard label="Status" value={latestWeek?.pain?"Watch":"Clear"} hint={latestWeek?.pain?`${latestWeek.pain} pain flag${latestWeek.pain>1?"s":""}`:"latest logged week"}/>
+          <MetricCard label="Avg RPE" value={latestWeek?.avgRpe?latestWeek.avgRpe.toFixed(1):"--"} hint={latestWeek?`week ${latestWeek.week}`:"no logs"}/>
+          <MetricCard label="Sleep" value={latestMetricValue(metrics,"sleep")?`${latestMetricValue(metrics,"sleep")}h`:"--"} hint="latest checkpoint"/>
+          <MetricCard label="Pain weeks" value={painWeeks.length} hint={painWeeks.length?`W${painWeeks.join(", W")}`:"none logged"}/>
+        </div>
+        {painWeeks.length>0 && (
+          <div className="card" style={{padding:13,marginTop:8,display:"flex",gap:8,alignItems:"flex-start",color:"var(--chalk-dim)",fontSize:13,lineHeight:1.45}}>
+            <AlertTriangle size={15} style={{color:"var(--deload)",marginTop:1,flexShrink:0}}/>
+            <span>Pain markers are a cue to reduce intensity, extend warm-ups, or keep the next climbing day technical.</span>
+          </div>
+        )}
+      </MetricSection>
+    </>
+  );
+}
 function Field({label,children}){return(<label style={{display:"block"}}><div style={{fontSize:11,color:"var(--faint)",marginBottom:4}}>{label}</div>{children}</label>);}
-function Spark({pts}){
-  const w=480,h=90,pad=10;
-  const xs=pts.map(p=>p.week), ys=pts.map(p=>p.pullups);
+function MetricSection({title,children}){
+  return (
+    <section style={{marginBottom:14}}>
+      <div className="disp" style={{fontSize:13,color:"var(--rope)",letterSpacing:".06em",textTransform:"uppercase",marginBottom:8}}>{title}</div>
+      {children}
+    </section>
+  );
+}
+function MetricCard({label,value,hint}){
+  return (
+    <div className="card" style={{padding:13,minHeight:82}}>
+      <div style={{fontSize:11,color:"var(--faint)",marginBottom:6}}>{label}</div>
+      <div className="disp" style={{fontSize:24,lineHeight:1,color:"var(--chalk)"}}>{value}</div>
+      <div style={{fontSize:11,color:"var(--chalk-dim)",marginTop:7,lineHeight:1.25}}>{hint}</div>
+    </div>
+  );
+}
+function EmptyMetric({text}){
+  return <div className="card" style={{padding:14,color:"var(--chalk-dim)",fontSize:13,lineHeight:1.45}}>{text}</div>;
+}
+function fmtSigned(n){ return `${n>0?"+":""}${n}`; }
+function maxKnown(vals){
+  const clean=vals.filter(v=>v!=null);
+  return clean.length ? Math.max(...clean) : null;
+}
+function CombinedTrendChart({metrics,weeklyStats}){
+  const series=[
+    {label:"Pull-ups",color:"var(--rope)",pts:metrics.filter(m=>m.pullups!=null).map(m=>({week:m.week,value:+m.pullups}))},
+    {label:"Flash",color:"var(--moss)",pts:metrics.filter(m=>m.flash!=null).map(m=>({week:m.week,value:+m.flash}))},
+    {label:"Project",color:"var(--test)",pts:metrics.filter(m=>m.project!=null).map(m=>({week:m.week,value:+m.project}))},
+    {label:"Sleep",color:"var(--chalk-dim)",pts:metrics.filter(m=>m.sleep!=null).map(m=>({week:m.week,value:+m.sleep}))},
+    {label:"Volume",color:"var(--deload)",pts:weeklyStats.filter(w=>w.volume>0).map(w=>({week:w.week,value:w.volume}))},
+  ].map(s=>normalizeSeries(s)).filter(s=>s.pts.length>1);
+  if(!series.length) return <EmptyMetric text="Add at least two checkpoints or logged-volume weeks to compare trend lines."/>;
+  const w=480,h=118,pad=12;
+  const all=series.flatMap(s=>s.pts);
+  const xs=all.map(p=>p.week), ys=all.map(p=>p.index);
   const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
   const X=v=>pad+((v-minX)/((maxX-minX)||1))*(w-2*pad);
   const Y=v=>h-pad-((v-minY)/((maxY-minY)||1))*(h-2*pad);
-  const d=pts.map((p,i)=>`${i?"L":"M"}${X(p.week)},${Y(p.pullups)}`).join(" ");
+  const pathFor=arr=>arr.map((p,i)=>`${i?"L":"M"}${X(p.week)},${Y(p.index)}`).join(" ");
   return (
     <div className="card" style={{padding:14,marginBottom:14}}>
-      <div className="disp" style={{fontSize:13,color:"var(--rope)",marginBottom:6}}>Pull-up trend</div>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:90}}>
-        <path d={d} fill="none" stroke="var(--rope)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        {pts.map((p,i)=>(<circle key={i} cx={X(p.week)} cy={Y(p.pullups)} r="3.5" fill="var(--moss)"/>))}
+      <div className="disp" style={{fontSize:13,color:"var(--rope)",marginBottom:6}}>Progress index</div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:118}}>
+        {[0,.5,1].map((n,idx)=><line key={idx} x1={pad} x2={w-pad} y1={pad+n*(h-2*pad)} y2={pad+n*(h-2*pad)} stroke="var(--line)" strokeWidth="1"/>)}
+        {series.map(s=><path key={s.label} d={pathFor(s.pts)} fill="none" stroke={s.color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>)}
+        {series.flatMap(s=>s.pts.map((p,pi)=><circle key={`${s.label}-${pi}`} cx={X(p.week)} cy={Y(p.index)} r="2.8" fill={s.color}/>))}
       </svg>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:4}}>
+        {series.map(s=><span key={s.label} className="mono" style={{fontSize:10,color:s.color}}>{s.label}</span>)}
+      </div>
+      <div style={{fontSize:11,color:"var(--faint)",lineHeight:1.35,textAlign:"center",marginTop:8}}>
+        Each line is normalized 0–100 within its own range. Use this to compare timing and direction, not raw magnitude.
+      </div>
     </div>
   );
+}
+function normalizeSeries(series){
+  const pts=series.pts.filter(p=>Number.isFinite(p.value));
+  if(pts.length<2) return {...series,pts};
+  const min=Math.min(...pts.map(p=>p.value)), max=Math.max(...pts.map(p=>p.value));
+  return {...series,pts:pts.map(p=>({...p,index:max===min?50:((p.value-min)/(max-min))*100}))};
 }
 
 /* ============================ LIBRARY ============================ */
@@ -1663,14 +2665,15 @@ function Library(){
 
 /* ============================ MANAGE (import/export) ============================ */
 function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
+  const sc=data.activeCycle?.schedule||data.schedule||{};
   const [json,setJson]=useState("");
   const [msg,setMsg]=useState("");
-  const [blockDraft,setBlockDraft]=useState(JSON.stringify(data.schedule.travelBlocks||[],null,2));
+  const [blockDraft,setBlockDraft]=useState(JSON.stringify(sc.travelBlocks||[],null,2));
   const exportAll=()=>setJson(exportBackup(data));
   const importAll=()=>{
     try{
       const result=importBackup(json,data);
-      if(result.ok){ onReplace(result.data); setBlockDraft(JSON.stringify(result.data.schedule.travelBlocks||[],null,2)); setMsg("✓ Backup imported"); }
+      if(result.ok){ onReplace(result.data); setBlockDraft(JSON.stringify((result.data.activeCycle?.schedule||result.data.schedule||{}).travelBlocks||[],null,2)); setMsg("✓ Backup imported"); }
     }
     catch(e){ setMsg("✗ "+e.message); }
   };
@@ -1678,7 +2681,7 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
     try{
       const blocks=JSON.parse(blockDraft||"[]");
       if(!Array.isArray(blocks)) throw new Error("Travel blocks must be an array");
-      setSchedule(s=>({...s,travelBlocks:blocks}));
+      setSchedule(s=>({...s,travelBlocks:blocks,lastRescheduleUndo:null}));
       setMsg("✓ Travel blocks saved");
     } catch(e){ setMsg("✗ "+e.message); }
   };
@@ -1694,11 +2697,11 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
         </p>
         <div className="card" style={{padding:14,marginBottom:14}}>
           <div className="disp" style={{fontSize:14,color:"var(--rope)",marginBottom:10}}>Schedule</div>
-          <Field label="Plan start date"><input className="tinput" type="date" value={data.schedule.startDate||""} onChange={e=>setSchedule(s=>({...s,startDate:e.target.value}))}/></Field>
+          <Field label="Plan start date"><input className="tinput" type="date" value={sc.startDate||""} onChange={e=>setSchedule(s=>({...s,startDate:e.target.value,lastRescheduleUndo:null}))}/></Field>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
             {SESSION_IDS.map(id=>(
               <Field key={id} label={id==="support"?"Support":`Climb ${id.slice(-1)}`}>
-                <select className="tinput" value={data.schedule.preferredSessionDays?.[id] ?? 0} onChange={e=>setSchedule(s=>({...s,preferredSessionDays:{...s.preferredSessionDays,[id]:+e.target.value}}))}>
+                <select className="tinput" value={sc.preferredSessionDays?.[id]??0} onChange={e=>setSchedule(s=>({...s,preferredSessionDays:{...s.preferredSessionDays,[id]:+e.target.value},lastRescheduleUndo:null}))}>
                   {WEEKDAYS.map((d,i)=><option key={d} value={i}>{d}</option>)}
                 </select>
               </Field>
