@@ -14,6 +14,7 @@ const STYLE = `
   --granite:#19150f; --granite2:#221c14; --surface:#2a2218; --surface2:#332a1f;
   --line:#46392b; --chalk:#f3ece0; --chalk-dim:#b6a890; --faint:#7d6f5b;
   --rope:#d4673a; --rope-soft:#a44e2c; --deload:#d99a2b; --test:#6699b3; --moss:#9bab63;
+  --sab:env(safe-area-inset-bottom,0px);
 }
 html,body,#root{margin:0;width:100%;min-height:100%;background:var(--granite);}
 html,body{height:100%;overflow-x:hidden;}
@@ -473,7 +474,7 @@ function DrillSheet({ name, onClose }){
   if(!e) return null;
   return (
     <div onClick={onClose} className="ct-root" style={{position:"fixed",inset:0,zIndex:70,background:"rgba(8,6,4,.62)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-      <div onClick={ev=>ev.stopPropagation()} className="card fadein" style={{width:"100%",maxWidth:520,borderRadius:"20px 20px 0 0",padding:"8px 18px 28px",maxHeight:"88vh",overflowY:"auto",background:"linear-gradient(180deg,var(--surface),var(--granite))"}}>
+      <div onClick={ev=>ev.stopPropagation()} className="card fadein" style={{width:"100%",maxWidth:520,borderRadius:"20px 20px 0 0",padding:"8px 18px calc(28px + var(--sab))",maxHeight:"88vh",overflowY:"auto",background:"linear-gradient(180deg,var(--surface),var(--granite))"}}>
         <div style={{width:42,height:4,background:"var(--line)",borderRadius:4,margin:"8px auto 18px"}}/>
         <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
           {d.fig && <div style={{width:104,height:104,flexShrink:0,background:"var(--granite)",borderRadius:14,border:"1px solid var(--line)",padding:6}}><Figure id={d.fig}/></div>}
@@ -615,7 +616,7 @@ function DrillSheetV2({ name, onClose }){
   const d=guideFor(e);
   return (
     <div onClick={onClose} className="ct-root" style={{position:"fixed",inset:0,zIndex:70,background:"rgba(8,6,4,.62)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-      <div onClick={ev=>ev.stopPropagation()} className="card fadein" style={{width:"100%",maxWidth:560,borderRadius:"20px 20px 0 0",padding:"8px 18px 28px",maxHeight:"88vh",overflowY:"auto",background:"linear-gradient(180deg,var(--surface),var(--granite))"}}>
+      <div onClick={ev=>ev.stopPropagation()} className="card fadein" style={{width:"100%",maxWidth:560,borderRadius:"20px 20px 0 0",padding:"8px 18px calc(28px + var(--sab))",maxHeight:"88vh",overflowY:"auto",background:"linear-gradient(180deg,var(--surface),var(--granite))"}}>
         <div style={{width:42,height:4,background:"var(--line)",borderRadius:4,margin:"8px auto 18px"}}/>
         <MovementDemo id={d.demoId} label={e.n}/>
         <div style={{marginTop:14}}>
@@ -654,7 +655,7 @@ function RoutineSheet({ rkey, week, onClose, onDrill }){
   const list=EX.filter(e=>e.c===r.cat && (!e.g || !week || e.g<=week));
   return (
     <div onClick={onClose} className="ct-root" style={{position:"fixed",inset:0,zIndex:68,background:"rgba(8,6,4,.62)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-      <div onClick={ev=>ev.stopPropagation()} className="card fadein" style={{width:"100%",maxWidth:520,borderRadius:"20px 20px 0 0",padding:"8px 18px 28px",maxHeight:"88vh",overflowY:"auto",background:"linear-gradient(180deg,var(--surface),var(--granite))"}}>
+      <div onClick={ev=>ev.stopPropagation()} className="card fadein" style={{width:"100%",maxWidth:520,borderRadius:"20px 20px 0 0",padding:"8px 18px calc(28px + var(--sab))",maxHeight:"88vh",overflowY:"auto",background:"linear-gradient(180deg,var(--surface),var(--granite))"}}>
         <div style={{width:42,height:4,background:"var(--line)",borderRadius:4,margin:"8px auto 18px"}}/>
         <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:4}}>
           {React.createElement(CAT_ICON[r.cat]||Activity,{size:22,style:{color:"var(--rope)"}})}
@@ -1300,7 +1301,7 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:50,overflowY:"auto"}}>
       {d && <DrillSheetV2 name={d} onClose={()=>setD(null)}/>}
-      <div style={{position:"relative",zIndex:1,maxWidth:520,margin:"0 auto",padding:"18px 16px 40px"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:520,margin:"0 auto",padding:"18px 16px calc(40px + var(--sab))"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
           <div>
             <div className="pill" style={{background:"var(--surface2)",color:"var(--chalk-dim)",display:"inline-block"}}>Week {week} · {session.day}</div>
@@ -1999,7 +2000,7 @@ function PlanCompletionModal({ plan, logs, metrics, schedule, completedCycles, o
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:75,overflowY:"auto"}}>
       <style>{STYLE}</style>
-      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 80px"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px calc(80px + var(--sab))"}}>
 
         {stage==="celebration" && (
           <div className="fadein stagger">
@@ -2104,7 +2105,7 @@ function CycleHistoryView({ completedCycles, onClose }){
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:60,overflowY:"auto"}}>
       <style>{STYLE}</style>
-      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 60px"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px calc(60px + var(--sab))"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
           <button className="btn btn-ghost" style={{padding:8}} onClick={onClose}><ChevronLeft size={16}/></button>
           <h2 className="disp" style={{fontSize:22,margin:0}}>Training history</h2>
@@ -2470,7 +2471,7 @@ export default function App(){
         onClose={()=>setRunner(null)} onSave={d=>saveLog(runner.week,runner.session.id,d)}
         onDelete={()=>deleteLog(runner.week,runner.session.id)}/>}
 
-      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 100px"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px calc(100px + var(--sab))"}}>
         {/* header */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -2758,7 +2759,7 @@ export default function App(){
 
       {/* tab bar */}
       <div className="tabbar" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:40}}>
-        <div style={{maxWidth:560,margin:"0 auto",display:"flex",justifyContent:"space-around",padding:"10px 8px 14px"}}>
+        <div style={{maxWidth:560,margin:"0 auto",display:"flex",justifyContent:"space-around",padding:"10px 8px calc(14px + var(--sab))"}}>
           {[["today",Flame,"Today"],["calendar",CalendarDays,"Calendar"],["plan",Mountain,"Plan"],["metrics",Activity,"Metrics"],["library",Hand,"Library"]].map(([t,Icon,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:tab===t?"var(--rope)":"var(--faint)"}}>
               <Icon size={21}/><span className="disp" style={{fontSize:10,fontWeight:700}}>{l}</span>
@@ -3133,7 +3134,7 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
   };
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:60,overflowY:"auto"}}>
-      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px 40px"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px calc(40px + var(--sab))"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h2 className="disp" style={{fontSize:22,margin:0}}>Manage plan</h2>
           <button className="btn btn-ghost" style={{padding:8}} onClick={onClose}><X size={18}/></button>
