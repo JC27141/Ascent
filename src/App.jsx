@@ -415,7 +415,7 @@ const DEFAULT_SCHEDULE = {
   sessionOverrides: {},
   lastRescheduleUndo: null,
 };
-const DEFAULT_SETTINGS = { };
+const DEFAULT_SETTINGS = { screeningEnabled: true };
 
 const DETAIL = {
   "Silent / precision feet":{fig:"feet",look:"Your toe lands once, dead on the hold, and makes no sound — no scrape, no second adjustment.",fix:"Most common error: dragging or re-placing the foot once it's on. Reset and place it cleanly."},
@@ -774,6 +774,7 @@ function normalizeLog(log){
     skipAction: log.status==="skip" ? (log.skipAction || "reschedule") : undefined,
     volumeByGrade: log.volumeByGrade && typeof log.volumeByGrade==="object" ? log.volumeByGrade : {},
     attemptsByGrade: log.attemptsByGrade && typeof log.attemptsByGrade==="object" ? log.attemptsByGrade : {},
+    screen: log.screen && typeof log.screen==="object" ? log.screen : null,
   };
 }
 function normalizeLogs(logs){
@@ -1188,11 +1189,78 @@ function Timer({ initial=60 }){
   );
 }
 
+/* ============================ READINESS SCREEN ============================ */
+// Pure scoring for the optional pre-workout screen. Mirrors the "Simple scoring"
+// rule: start at 10, subtract for poor recovery markers; hard red flags override.
+function computeScreen(s){
+  if(!s) return null;
+  const joints=[+s.fingerPain||0,+s.elbowPain||0,+s.shoulderPain||0];
+  const maxJoint=Math.max(0,...joints);
+  const f=s.redFlags||{};
+  const redFlag = maxJoint>=4 || s.warmupResponse==="worse"
+    || f.swelling || f.pop || f.numbness || f.weakness;
+  let score=10;
+  if((+s.sleep||5)<=2) score-=2;
+  if((+s.energy||5)<=2) score-=2;
+  if((+s.soreness||0)>=4) score-=2;
+  if(joints.some(p=>p===3)) score-=2;   // any joint/tendon pain at 3/5
+  let readiness, adjustment;
+  if(redFlag){ readiness="red"; adjustment="stop"; }
+  else if(score>=8){ readiness="green"; adjustment="normal"; }
+  else if(score>=5){ readiness="yellow"; adjustment="easy"; }
+  else { readiness="red"; adjustment="easy"; }   // 0–4: easy recovery only
+  return { ...s, redFlag, score, readiness, adjustment };
+}
+const READINESS_COLOR = { green:"var(--moss)", yellow:"var(--deload)", red:"var(--rope)" };
+const READINESS_LABEL = { green:"Green", yellow:"Yellow", red:"Red" };
+function ReadinessPill({ screen, showScore=false }){
+  if(!screen?.readiness) return null;
+  const col=READINESS_COLOR[screen.readiness];
+  return (
+    <span className="pill" style={{display:"inline-flex",alignItems:"center",gap:5,border:`1px solid ${col}`,background:"transparent",color:col}}>
+      <span style={{width:7,height:7,borderRadius:"50%",background:col}}/>
+      {READINESS_LABEL[screen.readiness]}{showScore && typeof screen.score==="number" ? ` ${screen.score}/10` : ""}
+    </span>
+  );
+}
+
+// Full-width row of large tap targets for a 0–5 / 1–5 rating. No sliders, no steppers.
+function ScaleRow({ label, hint, value, onPick, min=0, max=5, onInfo }){
+  const opts=[]; for(let n=min;n<=max;n++) opts.push(n);
+  return (
+    <div style={{marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+        <span style={{fontSize:15,color:"var(--chalk)"}}>{label}</span>
+        {onInfo && <button className="btn btn-ghost" style={{padding:"2px 8px",fontSize:11}} onClick={onInfo}>what to check →</button>}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        {opts.map(n=>{ const on=value===n;
+          return (
+            <button key={n} onClick={()=>onPick(n)} className="btn disp"
+              style={{flex:1,minHeight:48,fontSize:18,padding:0,borderRadius:12,
+                background:on?"var(--rope)":"var(--surface)",color:on?"#1a120c":"var(--chalk)",
+                border:`1px solid ${on?"var(--rope)":"var(--line)"}`}}>{n}</button>
+          );})}
+      </div>
+      {hint && <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--faint)",marginTop:5}}><span>{hint[0]}</span><span>{hint[1]}</span></div>}
+    </div>
+  );
+}
+// Static guidance shown when a section's "what to check" is expanded.
+const SCREEN_INFO = {
+  soreness: "DOMS is a dull, broad ache that warms up. If soreness changes how you move (bent arms, shrugged shoulders), it's not an easy-volume day. 0 none · 3 alters movement · 5 impairs normal movement.",
+  fingerPain: "Make a fist, open fully, press each fingertip to thumb, squeeze a jug. Localized pulley tenderness, swelling, or a pop/crack = stop finger loading. 0 fine · 3 tender · 4+ pain on squeeze/flex.",
+  elbowPain: "Straighten/bend, rotate palm up & down, grip lightly. Tender inside or outside elbow = no hard pulls; pain that rises with gripping = stop. 0 fine · 3 tender · 4+ pain on grip.",
+  shoulderPain: "Arm circles, band external rotation, one active hang. Pinching overhead = avoid dynos/gastons/lockoffs; painful weakness or radiating pain = stop. 0 fine · 3 pinch/awareness · 4+ painful or weak.",
+};
+
 /* ============================ RUNNER ============================ */
-function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existingLog }){
+function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existingLog, settings, setSettings }){
   const sessionRoutines=session.routines||[];
+  const screeningOn=settings?.screeningEnabled!==false;
   const steps=[];
   steps.push({kind:"warmup"});
+  if(screeningOn) steps.push({kind:"screen"});
   if(session.id!=="support") steps.push({kind:"climb"});
   sessionRoutines.forEach(r=>steps.push({kind:"routine",rkey:r}));
   steps.push({kind:"log"});
@@ -1207,11 +1275,25 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
   const [attempts,setAttempts]=useState(existingLog?.attemptsByGrade || {});
   const [d,setD]=useState(null);
   const [confirmClear,setConfirmClear]=useState(false);
+  // Readiness screen state
+  const [screen,setScreen]=useState(existingLog?.screen || null);
+  const [screenDraft,setScreenDraft]=useState(()=>existingLog?.screen
+    || { sleep:3, energy:3, soreness:0, fingerPain:0, elbowPain:0, shoulderPain:0, warmupResponse:"same", redFlags:{} });
+  const [screenStarted,setScreenStarted]=useState(!!existingLog?.screen);
+  const [screenInfo,setScreenInfo]=useState(null); // which help section is expanded
+  const screenResult=computeScreen(screen);
   const step=steps[i];
   const last=i===steps.length-1;
   const toggleR=(r)=>setRd(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
 
-  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:existingLog?.date || today(),amendedAt:existingLog?nowIso():existingLog?.amendedAt,volumeByGrade:volume,attemptsByGrade:attempts}); };
+  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:existingLog?.date || today(),amendedAt:existingLog?nowIso():existingLog?.amendedAt,volumeByGrade:volume,attemptsByGrade:attempts,screen:screen||null}); };
+  // Commit the live draft as the saved screen result and advance; auto-flag pain on concerning readings.
+  const commitScreen=()=>{
+    const r=computeScreen(screenDraft);
+    setScreen(r);
+    if(r && (r.redFlag || [r.fingerPain,r.elbowPain,r.shoulderPain].some(p=>(+p||0)>=3))) setPain(true);
+    setI(i+1);
+  };
   const bumpVolume=(g,delta)=>setVolume(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
   const bumpAttempts=(g,delta)=>setAttempts(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
 
@@ -1231,6 +1313,16 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
         </div>
 
         <div className="fadein" key={i}>
+          {(step.kind==="climb"||step.kind==="routine"||step.kind==="log") && screenResult && screenResult.readiness!=="green" && (
+            <div className="card" style={{padding:"10px 12px",marginBottom:14,borderColor:READINESS_COLOR[screenResult.readiness],display:"flex",alignItems:"center",gap:8}}>
+              <span style={{width:10,height:10,borderRadius:"50%",background:READINESS_COLOR[screenResult.readiness],flexShrink:0}}/>
+              <span style={{fontSize:13,color:"var(--chalk-dim)"}}>
+                {screenResult.readiness==="yellow" && "Yellow day — easy volume only. No max pulling, crimps, or limit bouldering."}
+                {screenResult.readiness==="red" && screenResult.adjustment==="stop" && "Red day — skip hard climbing. Rest, mobility, or get evaluated."}
+                {screenResult.readiness==="red" && screenResult.adjustment==="easy" && "Red day — easy recovery only. No hard training today."}
+              </span>
+            </div>
+          )}
           {step.kind==="warmup" && (
             <div>
               <h2 className="disp" style={{fontSize:26,margin:"0 0 6px"}}>Warm-up gate</h2>
@@ -1246,6 +1338,86 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
               )}
               <Timer initial={900}/>
             </div>
+          )}
+          {step.kind==="screen" && (
+            !screenStarted ? (
+              <div>
+                <h2 className="disp" style={{fontSize:26,margin:"0 0 6px"}}>Readiness screen</h2>
+                <p style={{color:"var(--chalk-dim)",marginTop:0,lineHeight:1.55}}>
+                  A quick run-down now you've warmed up: rate how recovered you feel and how the warm-up went.
+                  Takes under a minute and tells you whether today is a green, yellow, or red day.
+                </p>
+                <button className="btn btn-rope" style={{width:"100%",padding:16,fontSize:17,marginTop:6}} onClick={()=>setScreenStarted(true)}>Start screen</button>
+                <button className="btn btn-ghost" style={{width:"100%",padding:14,fontSize:15,marginTop:10}} onClick={()=>{setScreen(null);setI(i+1);}}>Skip for today</button>
+                <button className="btn btn-ghost" style={{width:"100%",padding:10,fontSize:12,marginTop:14,color:"var(--faint)"}}
+                  onClick={()=>setSettings&&setSettings(s=>({...s,screeningEnabled:false}))}>Turn the screen off for every session</button>
+              </div>
+            ) : (
+              <div>
+                <h2 className="disp" style={{fontSize:24,margin:"0 0 14px"}}>How are you today?</h2>
+                <ScaleRow label="Sleep" min={1} max={5} hint={["poor","great"]} value={screenDraft.sleep} onPick={v=>setScreenDraft(d=>({...d,sleep:v}))}/>
+                <ScaleRow label="Energy" min={1} max={5} hint={["drained","fresh"]} value={screenDraft.energy} onPick={v=>setScreenDraft(d=>({...d,energy:v}))}/>
+                <ScaleRow label="Muscle soreness" min={0} max={5} hint={["none","severe"]} value={screenDraft.soreness} onPick={v=>setScreenDraft(d=>({...d,soreness:v}))} onInfo={()=>setScreenInfo(p=>p==="soreness"?null:"soreness")}/>
+                {screenInfo==="soreness" && <div className="card fadein" style={{padding:11,marginBottom:14,fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>{SCREEN_INFO.soreness}</div>}
+                <div className="card" style={{padding:12,marginBottom:14,background:"var(--granite)"}}>
+                  <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0,marginBottom:10}}>Joint / tendon pain</div>
+                  <ScaleRow label="Fingers" min={0} max={5} value={screenDraft.fingerPain} onPick={v=>setScreenDraft(d=>({...d,fingerPain:v}))} onInfo={()=>setScreenInfo(p=>p==="fingerPain"?null:"fingerPain")}/>
+                  {screenInfo==="fingerPain" && <div className="fadein" style={{padding:"2px 0 12px",fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>{SCREEN_INFO.fingerPain}</div>}
+                  <ScaleRow label="Elbows" min={0} max={5} value={screenDraft.elbowPain} onPick={v=>setScreenDraft(d=>({...d,elbowPain:v}))} onInfo={()=>setScreenInfo(p=>p==="elbowPain"?null:"elbowPain")}/>
+                  {screenInfo==="elbowPain" && <div className="fadein" style={{padding:"2px 0 12px",fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>{SCREEN_INFO.elbowPain}</div>}
+                  <ScaleRow label="Shoulders" min={0} max={5} value={screenDraft.shoulderPain} onPick={v=>setScreenDraft(d=>({...d,shoulderPain:v}))} onInfo={()=>setScreenInfo(p=>p==="shoulderPain"?null:"shoulderPain")}/>
+                  {screenInfo==="shoulderPain" && <div className="fadein" style={{padding:"2px 0 2px",fontSize:13,color:"var(--chalk-dim)",lineHeight:1.5}}>{SCREEN_INFO.shoulderPain}</div>}
+                </div>
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:15,color:"var(--chalk)",marginBottom:6}}>After warming up, you feel…</div>
+                  <div style={{display:"flex",gap:6}}>
+                    {[["better","Better"],["same","Same"],["worse","Worse"]].map(([v,l])=>{ const on=screenDraft.warmupResponse===v;
+                      const tone=v==="better"?"var(--moss)":v==="worse"?"var(--rope)":"var(--rope)";
+                      return (
+                        <button key={v} onClick={()=>setScreenDraft(d=>({...d,warmupResponse:v}))} className="btn disp"
+                          style={{flex:1,minHeight:48,fontSize:16,borderRadius:12,
+                            background:on?tone:"var(--surface)",color:on?"#1a120c":"var(--chalk)",
+                            border:`1px solid ${on?tone:"var(--line)"}`}}>{l}</button>
+                      );})}
+                  </div>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:15,color:"var(--chalk)",marginBottom:6}}>Any of these? Tap to flag</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {[["swelling","Swelling or bruising"],["pop","A pop / crack feeling"],["numbness","Numbness or tingling"],["weakness","Weakness or instability"]].map(([k,l])=>{ const on=!!screenDraft.redFlags?.[k];
+                      return (
+                        <button key={k} onClick={()=>setScreenDraft(d=>({...d,redFlags:{...d.redFlags,[k]:!d.redFlags?.[k]}}))} className="btn"
+                          style={{width:"100%",minHeight:48,padding:"0 14px",fontSize:15,borderRadius:12,display:"flex",alignItems:"center",gap:10,textAlign:"left",
+                            background:on?"var(--rope-soft)":"var(--surface)",color:"var(--chalk)",border:`1px solid ${on?"var(--rope)":"var(--line)"}`}}>
+                          {on?<Check size={18} style={{color:"var(--rope)"}}/>:<X size={18} style={{color:"var(--faint)"}}/>}{l}
+                        </button>
+                      );})}
+                  </div>
+                </div>
+                {(()=>{ const r=computeScreen(screenDraft); const col=READINESS_COLOR[r.readiness];
+                  return (
+                    <div className="card fadein" style={{padding:14,marginBottom:16,borderColor:col}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+                        <span className="disp" style={{fontSize:20,color:col}}>{READINESS_LABEL[r.readiness]} day</span>
+                        <span className="mono" style={{fontSize:13,color:"var(--faint)"}}>score {r.score}/10</span>
+                      </div>
+                      <p style={{margin:0,fontSize:14,color:"var(--chalk-dim)",lineHeight:1.5}}>
+                        {r.readiness==="green" && "Normal session — train within the plan."}
+                        {r.readiness==="yellow" && "Reduce intensity or volume: V0–V1 volume, footwork drills and mobility. No max pulling, no crimps, no limit bouldering."}
+                        {r.readiness==="red" && r.adjustment==="stop" && "Skip hard climbing. Rest, mobility, or get evaluated — don't train through it."}
+                        {r.readiness==="red" && r.adjustment==="easy" && "Easy recovery only: gentle movement, mobility, active recovery. No hard training today."}
+                      </p>
+                      {r.redFlag && (
+                        <p style={{margin:"10px 0 0",fontSize:12,color:col,lineHeight:1.5}}>
+                          Sharp pain, swelling, a pop, numbness, weakness, or dark urine after hard exercise can signal a real injury — not normal soreness. If it persists, get it looked at. This screen is guidance, not medical advice.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+                <button className="btn btn-rope" style={{width:"100%",padding:16,fontSize:17}} onClick={commitScreen}>Continue</button>
+              </div>
+            )
           )}
           {step.kind==="climb" && (
             <div>
@@ -1410,7 +1582,7 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
           )}
         </div>
 
-        {!last && (
+        {!last && step.kind!=="screen" && (
           <div style={{display:"flex",gap:10,marginTop:24}}>
             {i>0 && <button className="btn btn-ghost" style={{padding:"12px 16px"}} onClick={()=>setI(i-1)}><ChevronLeft size={18}/></button>}
             <button className="btn btn-rope" style={{flex:1,padding:14,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={()=>setI(i+1)}>
@@ -2294,6 +2466,7 @@ export default function App(){
       {runner && <Runner week={runner.week} session={runner.session}
         spacingWarn={spacingWarn && runner.session.id!=="support"}
         existingLog={logs[logKey(runner.week,runner.session.id)]}
+        settings={settings} setSettings={setSettings}
         onClose={()=>setRunner(null)} onSave={d=>saveLog(runner.week,runner.session.id,d)}
         onDelete={()=>deleteLog(runner.week,runner.session.id)}/>}
 
@@ -2485,6 +2658,7 @@ export default function App(){
                         </div>
                         {log.status!=="skip" && <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:4}}>RPE {log.rpe}</div>}
                         {log.pain && <AlertTriangle size={13} style={{color:"var(--deload)",marginTop:3}}/>}
+                        {log.screen && <div style={{marginTop:5}}><ReadinessPill screen={log.screen}/></div>}
                         <button className="btn btn-ghost" style={{padding:"5px 8px",fontSize:11,marginTop:5}} onClick={()=>setRunner({week:curWeek,session:s})}>Edit</button>
                       </div>
                     ):(
@@ -2656,6 +2830,34 @@ function Metrics({ metrics, setMetrics, logs, plan, onEditLog, planLen, onShowHi
 
       <MetricDashboard metrics={metrics} weeklyStats={weeklyStats} activeWeeks={activeWeeks} latestWeek={latestWeek} latestFlash={latestFlash} latestProject={latestProject} pullDelta={pullDelta} flashDelta={flashDelta} projectDelta={projectDelta} insights={insights} hasLogs={hasLogs} painWeeks={painWeeks} hardestSend={hardestSend} planLen={planLen}/>
 
+      {(()=>{
+        const screened=loggedSessionItems(plan,logs).filter(it=>it.log.screen).slice().reverse(); // chronological
+        if(screened.length===0) return null;
+        const counts=screened.reduce((a,it)=>{ a[it.log.screen.readiness]=(a[it.log.screen.readiness]||0)+1; return a; },{});
+        return (
+          <MetricSection title="Readiness trend">
+            <div className="card" style={{padding:15}}>
+              <div style={{display:"flex",gap:8,marginBottom:14}}>
+                {["green","yellow","red"].map(k=>(
+                  <div key={k} style={{flex:1,textAlign:"center",padding:"8px 0",borderRadius:10,border:`1px solid ${READINESS_COLOR[k]}`}}>
+                    <div className="disp" style={{fontSize:20,color:READINESS_COLOR[k]}}>{counts[k]||0}</div>
+                    <div style={{fontSize:11,color:"var(--faint)"}}>{READINESS_LABEL[k]}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",alignItems:"flex-end",gap:4,height:64}}>
+                {screened.slice(-16).map(it=>{ const sc=it.log.screen; const h=Math.max(6,(sc.score/10)*60);
+                  return (
+                    <div key={it.key} title={`W${it.week} ${sessionTitle(it.session)} · ${READINESS_LABEL[sc.readiness]} ${sc.score}/10`}
+                      style={{flex:1,height:h,borderRadius:4,background:READINESS_COLOR[sc.readiness],opacity:.85}}/>
+                  );})}
+              </div>
+              <div style={{fontSize:11,color:"var(--faint)",marginTop:8}}>Pre-workout readiness score per screened session (newest on the right).</div>
+            </div>
+          </MetricSection>
+        );
+      })()}
+
       <MetricSection title="Recent logs">
         {recentLogs.length===0 ? (
           <EmptyMetric text="Session logs will appear here after you save workouts."/>
@@ -2669,6 +2871,7 @@ function Metrics({ metrics, setMetrics, logs, plan, onEditLog, planLen, onShowHi
                   <div>
                     <div className="disp" style={{fontSize:13,color:"var(--chalk)"}}>W{item.week} {sessionTitle(item.session)}</div>
                     <div className="mono" style={{fontSize:11,color:"var(--faint)",marginTop:3}}>{item.log.date?fmtFullDate(item.log.date):"No date"} - RPE {item.log.rpe || "-"} - {sends} sends - {attempts} tries</div>
+                    {item.log.screen && <div style={{marginTop:5}}><ReadinessPill screen={item.log.screen} showScore/></div>}
                     {item.log.notes && <div style={{fontSize:12,color:"var(--chalk-dim)",marginTop:5,lineHeight:1.35,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.log.notes}</div>}
                   </div>
                   <button className="btn btn-ghost" style={{padding:"7px 9px",display:"flex",alignItems:"center",gap:5,fontSize:12}} onClick={()=>onEditLog(item)}><Pencil size={13}/>Edit</button>
