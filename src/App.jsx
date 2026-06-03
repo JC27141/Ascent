@@ -680,10 +680,11 @@ function RoutineSheet({ rkey, week, onClose, onDrill }){
   );
 }
 
-function Pyramid({ sends, setSends, flash }){
+function Pyramid({ sends, setSends, flash, readOnly=false }){
   const grades=Object.keys(sends).map(Number);
   const maxG=Math.max(4, flash||0, ...grades);
-  const rows=[]; for(let g=maxG; g>=0; g--) rows.push(g);
+  const allRows=[]; for(let g=maxG; g>=0; g--) allRows.push(g);
+  const rows=readOnly ? allRows.filter(g=>(sends[g]||0)>0) : allRows;
   const maxCount=Math.max(1, ...rows.map(g=>sends[g]||0));
   const total=rows.reduce((a,g)=>a+(sends[g]||0),0);
   const bump=(g,delta)=>setSends(s=>{ const n={...s}; n[g]=Math.max(0,(n[g]||0)+delta); return n; });
@@ -691,26 +692,29 @@ function Pyramid({ sends, setSends, flash }){
     <div className="card" style={{padding:15,marginBottom:14}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:12}}>
         <div className="disp" style={{fontSize:14,color:"var(--rope)"}}>Climbing pyramid <span style={{color:"var(--faint)",fontWeight:500}}>· {total} sends</span></div>
-        <div style={{fontSize:11,color:"var(--faint)"}}>tap +/− to log</div>
+        {!readOnly && <div style={{fontSize:11,color:"var(--faint)"}}>tap +/− to log</div>}
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:6}}>
-        {rows.map(g=>{
-          const n=sends[g]||0, w=`${(n/maxCount)*100}%`, isFlash=g===flash;
-          return (
-            <div key={g} style={{display:"flex",alignItems:"center",gap:8}}>
-              <button onClick={()=>bump(g,-1)} style={{width:24,height:24,borderRadius:6,border:"1px solid var(--line)",background:"transparent",color:"var(--faint)",cursor:"pointer",flexShrink:0,fontSize:16,lineHeight:1}}>–</button>
-              <div className="disp mono" style={{width:28,textAlign:"center",fontSize:13,color:isFlash?"var(--moss)":"var(--chalk-dim)"}}>V{g}</div>
-              <div style={{flex:1,height:24,display:"flex",justifyContent:"center",alignItems:"center"}}>
-                <div style={{width:w,minWidth:n?28:3,height:"100%",borderRadius:6,transition:"width .25s",display:"flex",alignItems:"center",justifyContent:"center",
-                  background:n?(isFlash?"linear-gradient(90deg,var(--moss),var(--rope))":"linear-gradient(90deg,var(--rope-soft),var(--rope))"):"var(--granite)"}}>
-                  {n>0 && <span className="mono" style={{fontSize:12,color:"#1a120c",fontWeight:600}}>{n}</span>}
+      {readOnly && rows.length===0
+        ? <div style={{fontSize:13,color:"var(--faint)",textAlign:"center",padding:"8px 0"}}>No sends logged yet</div>
+        : <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {rows.map(g=>{
+            const n=sends[g]||0, w=`${(n/maxCount)*100}%`, isFlash=g===flash;
+            return (
+              <div key={g} style={{display:"flex",alignItems:"center",gap:8}}>
+                {!readOnly && <button onClick={()=>bump(g,-1)} style={{width:24,height:24,borderRadius:6,border:"1px solid var(--line)",background:"transparent",color:"var(--faint)",cursor:"pointer",flexShrink:0,fontSize:16,lineHeight:1}}>–</button>}
+                <div className="disp mono" style={{width:28,textAlign:"center",fontSize:13,color:isFlash?"var(--moss)":"var(--chalk-dim)"}}>V{g}</div>
+                <div style={{flex:1,height:24,display:"flex",justifyContent:"center",alignItems:"center"}}>
+                  <div style={{width:w,minWidth:n?28:3,height:"100%",borderRadius:6,transition:"width .25s",display:"flex",alignItems:"center",justifyContent:"center",
+                    background:n?(isFlash?"linear-gradient(90deg,var(--moss),var(--rope))":"linear-gradient(90deg,var(--rope-soft),var(--rope))"):"var(--granite)"}}>
+                    {n>0 && <span className="mono" style={{fontSize:12,color:"#1a120c",fontWeight:600}}>{n}</span>}
+                  </div>
                 </div>
+                {!readOnly && <button onClick={()=>bump(g,1)} style={{width:24,height:24,borderRadius:6,border:"1px solid var(--rope)",background:"transparent",color:"var(--rope)",cursor:"pointer",flexShrink:0,fontSize:16,lineHeight:1}}>+</button>}
               </div>
-              <button onClick={()=>bump(g,1)} style={{width:24,height:24,borderRadius:6,border:"1px solid var(--rope)",background:"transparent",color:"var(--rope)",cursor:"pointer",flexShrink:0,fontSize:16,lineHeight:1}}>+</button>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      }
       {flash!=null && <div style={{fontSize:11,color:"var(--faint)",marginTop:10,textAlign:"center"}}>V{flash} highlighted = your current flash grade</div>}
     </div>
   );
@@ -2626,7 +2630,7 @@ export default function App(){
             )}
 
             {/* CLIMBING PYRAMID */}
-            <Pyramid sends={combinedSends} setSends={setSends} flash={latestFlash}/>
+            <Pyramid sends={combinedSends} setSends={setSends} flash={latestFlash} readOnly/>
 
             {spacingWarn && (
               <div className="card" style={{padding:13,borderColor:"var(--deload)",marginBottom:14,display:"flex",gap:10}}>
