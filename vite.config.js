@@ -6,8 +6,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.js",
       registerType: "autoUpdate",
       includeAssets: ["icon.svg"],
+      devOptions: {
+        enabled: true,
+        type: "module",
+      },
       manifest: {
         name: "Ascent Trainer",
         short_name: "Ascent",
@@ -27,7 +34,7 @@ export default defineConfig({
           }
         ]
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"]
       }
     })

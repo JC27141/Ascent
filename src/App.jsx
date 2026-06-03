@@ -6,6 +6,10 @@ import {
   CalendarDays, Trash2, MoveRight, LogOut, Wifi, WifiOff, Award, History
 } from "lucide-react";
 import { isCloudConfigured, supabase } from "./supabaseClient.js";
+import {
+  getActive, ensureActive, applyDelta, setConfig, clearActive,
+  subscribeLive, notificationOptions,
+} from "./liveLog.js";
 
 /* ============================ THEME ============================ */
 const STYLE = `
@@ -416,7 +420,7 @@ const DEFAULT_SCHEDULE = {
   sessionOverrides: {},
   lastRescheduleUndo: null,
 };
-const DEFAULT_SETTINGS = { screeningEnabled: true };
+const DEFAULT_SETTINGS = { screeningEnabled: true, lockScreenLogging: false };
 
 const DETAIL = {
   "Silent / precision feet":{fig:"feet",look:"Your toe lands once, dead on the hold, and makes no sound — no scrape, no second adjustment.",fix:"Most common error: dragging or re-placing the foot once it's on. Reset and place it cleanly."},
@@ -878,6 +882,32 @@ const fmtFullDate = (date) => {
 const PHASE_COLOR = { deload:"var(--deload)", test:"var(--test)", normal:"var(--rope)" };
 const CAT_ICON = { Shoulder:Wind, "Pull-ups":Dumbbell, Core:Activity, "Foot/Ankle":Footprints, Fingers:Hand, Technique:Mountain, Antagonist:Dumbbell };
 const logKey = (week, sid) => `${week}-${sid}`;
+// The 2-3 grades a session's plan text calls for — these seed the lock-screen
+// buttons. Parsed from the free-text focus/note (e.g. "many V0–V2",
+// "Projecting V4–V5"); ranges are expanded. It's a suggested default the user
+// can edit in Climb Mode, so an imperfect parse is fine.
+const gradesForSession = (session) => {
+  const text = `${session?.focus || ""} ${session?.note || ""}`;
+  const set = new Set();
+  const range = /V(\d+)\s*(?:[–—-]|to|\/)\s*V?(\d+)/gi;
+  let m;
+  while ((m = range.exec(text))) {
+    const a = +m[1], b = +m[2];
+    for (let g = Math.min(a, b); g <= Math.max(a, b); g++) set.add(g);
+  }
+  const single = /V(\d+)/gi;
+  while ((m = single.exec(text))) set.add(+m[1]);
+  let grades = [...set].filter((g) => g >= 0 && g <= 9).sort((a, b) => a - b);
+  if (grades.length === 0) grades = [0, 1, 2];
+  if (grades.length > 3) grades = grades.slice(-3); // keep the 3 hardest
+  return grades;
+};
+// Volume / technique days are mostly sends; projecting / max / test days are
+// mostly attempts. Used as the default for what a lock-screen grade tap logs.
+const defaultLogKind = (session) =>
+  /project|redpoint|performance|max|test|limit|flash to|attempt/i.test(session?.focus || "")
+    ? "attempt"
+    : "send";
 const addDays = (date, days) => {
   const d=parseLocalDate(date);
   d.setDate(d.getDate()+days);
@@ -1256,6 +1286,28 @@ const SCREEN_INFO = {
 };
 
 /* ============================ RUNNER ============================ */
+// Keeps the screen awake (Screen Wake Lock API) while a session is active, so
+// the phone never locks mid-session and there's nothing to unlock/navigate to.
+// Re-acquires on visibility change — wake locks drop whenever the tab is hidden.
+function useWakeLock(active){
+  const ref=useRef(null);
+  useEffect(()=>{
+    if(!active || typeof navigator==="undefined" || !("wakeLock" in navigator)) return;
+    let cancelled=false;
+    const request=async()=>{
+      try{ ref.current=await navigator.wakeLock.request("screen"); }catch{ /* denied or tab hidden */ }
+    };
+    const onVis=()=>{ if(document.visibilityState==="visible" && !cancelled) request(); };
+    request();
+    document.addEventListener("visibilitychange",onVis);
+    return ()=>{
+      cancelled=true;
+      document.removeEventListener("visibilitychange",onVis);
+      if(ref.current){ ref.current.release().catch(()=>{}); ref.current=null; }
+    };
+  },[active]);
+}
+
 function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existingLog, settings, setSettings }){
   const sessionRoutines=session.routines||[];
   const screeningOn=settings?.screeningEnabled!==false;
@@ -1287,7 +1339,129 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
   const last=i===steps.length-1;
   const toggleR=(r)=>setRd(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
 
-  const save=()=>{ onSave({status,rpe,pain,notes,routinesDone:rd,date:existingLog?.date || today(),amendedAt:existingLog?nowIso():existingLog?.amendedAt,volumeByGrade:volume,attemptsByGrade:attempts,screen:screen||null}); };
+  /* ---- Climb Mode: live one-tap logging (a fresh, non-support session) ---- */
+  const liveMode=!editing && session.id!=="support";
+  useWakeLock(session.id!=="support"); // keep the screen on during climbing
+  // Browsers cap notification actions (Chrome/Android = 2), so the lock screen
+  // can only ever show this many grade buttons.
+  const maxLockButtons=(typeof Notification!=="undefined" && Notification.maxActions) || 2;
+  const [activeGrade,setActiveGrade]=useState(()=>{ const g=gradesForSession(session); return g[Math.floor(g.length/2)] ?? 1; });
+  const [gradeButtons,setGradeButtons]=useState(()=>gradesForSession(session).slice(-maxLockButtons)); // lock-screen grades
+  const [lockKind,setLockKind]=useState(()=>defaultLogKind(session));           // lock-screen mode
+  const [lockOn,setLockOn]=useState(false);                                     // notification active?
+  const [history,setHistory]=useState([]);                                      // for Undo
+  const [notifErr,setNotifErr]=useState(null);
+
+  // Resume an in-progress session (in-app + lock-screen taps already logged),
+  // or seed a fresh live record so the SW has context for notification taps.
+  useEffect(()=>{
+    if(!liveMode) return;
+    let cancelled=false;
+    (async()=>{
+      const rec=await getActive(week,session.id);
+      if(cancelled) return;
+      if(rec){
+        setVolume(rec.volumeByGrade||{});
+        setAttempts(rec.attemptsByGrade||{});
+        if(rec.gradeButtons?.length) setGradeButtons(rec.gradeButtons);
+        if(rec.logKind) setLockKind(rec.logKind);
+      } else {
+        ensureActive(week,session.id,{
+          gradeButtons:gradesForSession(session),
+          logKind:defaultLogKind(session),
+          volumeByGrade:existingLog?.volumeByGrade||{},
+          attemptsByGrade:existingLog?.attemptsByGrade||{},
+        });
+      }
+    })();
+    return ()=>{ cancelled=true; };
+  },[liveMode,week,session.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lock-screen taps land in the SW; it broadcasts the new counts here.
+  useEffect(()=>{
+    if(!liveMode) return;
+    return subscribeLive((data)=>{
+      if(!data || data.cleared || data.key!==`${week}-${session.id}`) return;
+      setVolume(data.volumeByGrade||{});
+      setAttempts(data.attemptsByGrade||{});
+    });
+  },[liveMode,week,session.id]);
+
+  const showNotif=async(rec)=>{
+    try{
+      const reg=await navigator.serviceWorker?.ready;
+      if(!reg||!rec) return;
+      const {title,options}=notificationOptions(rec);
+      await reg.showNotification(title,options);
+    }catch{ /* ignore */ }
+  };
+  const closeNotif=async()=>{
+    try{
+      const reg=await navigator.serviceWorker?.ready;
+      const ns=await reg?.getNotifications({tag:"ascent-climblog"});
+      ns?.forEach(n=>n.close());
+    }catch{ /* ignore */ }
+  };
+  // Single source of truth for a count change: optimistic state + persist to the
+  // shared store (so the SW/notification stay in sync), then refresh from the
+  // authoritative record.
+  const adjust=async(kind,grade,delta)=>{
+    if(kind==="attempt") setAttempts(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
+    else setVolume(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
+    if(liveMode){
+      const rec=await applyDelta(week,session.id,kind,grade,delta);
+      setVolume(rec.volumeByGrade||{});
+      setAttempts(rec.attemptsByGrade||{});
+      if(lockOn) showNotif(rec);
+    }
+  };
+  const logClimb=(kind,grade)=>{
+    if(navigator.vibrate) navigator.vibrate(kind==="attempt"?[12,24,12]:24);
+    setHistory(h=>[...h,{kind,grade}].slice(-100));
+    adjust(kind,grade,1);
+  };
+  const undoLast=()=>{
+    if(history.length===0) return;
+    const lastAction=history[history.length-1];
+    setHistory(h=>h.slice(0,-1));
+    if(navigator.vibrate) navigator.vibrate(10);
+    adjust(lastAction.kind,lastAction.grade,-1);
+  };
+  const updateLockConfig=async(next)=>{
+    const gb=next.gradeButtons??gradeButtons;
+    const lk=next.logKind??lockKind;
+    if(next.gradeButtons) setGradeButtons(next.gradeButtons);
+    if(next.logKind) setLockKind(next.logKind);
+    if(liveMode){
+      await setConfig(week,session.id,{gradeButtons:gb,logKind:lk});
+      if(lockOn){ const rec=await getActive(week,session.id); showNotif(rec); }
+    }
+  };
+  const toggleLockGrade=(g)=>{
+    const has=gradeButtons.includes(g);
+    if(!has && gradeButtons.length>=maxLockButtons) return; // device action cap
+    const next=has ? gradeButtons.filter(x=>x!==g) : [...gradeButtons,g].sort((a,b)=>a-b);
+    if(next.length===0) return; // keep at least one
+    updateLockConfig({gradeButtons:next});
+  };
+  const toggleLock=async()=>{
+    if(lockOn){ setLockOn(false); closeNotif(); return; }
+    if(typeof Notification==="undefined"){ setNotifErr("This device doesn't support notifications."); return; }
+    let perm=Notification.permission;
+    if(perm==="default") perm=await Notification.requestPermission();
+    if(perm!=="granted"){ setNotifErr("Allow notifications to use lock-screen buttons."); return; }
+    setNotifErr(null);
+    await setConfig(week,session.id,{gradeButtons,logKind:lockKind});
+    const rec=await getActive(week,session.id);
+    setLockOn(true);
+    if(setSettings) setSettings(s=>({...s,lockScreenLogging:true}));
+    showNotif(rec);
+  };
+
+  const save=()=>{
+    if(liveMode){ clearActive(week,session.id); closeNotif(); }
+    onSave({status,rpe,pain,notes,routinesDone:rd,date:existingLog?.date || today(),amendedAt:existingLog?nowIso():existingLog?.amendedAt,volumeByGrade:volume,attemptsByGrade:attempts,screen:screen||null});
+  };
   // Commit the live draft as the saved screen result and advance; auto-flag pain on concerning readings.
   const commitScreen=()=>{
     const r=computeScreen(screenDraft);
@@ -1295,8 +1469,8 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
     if(r && (r.redFlag || [r.fingerPain,r.elbowPain,r.shoulderPain].some(p=>(+p||0)>=3))) setPain(true);
     setI(i+1);
   };
-  const bumpVolume=(g,delta)=>setVolume(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
-  const bumpAttempts=(g,delta)=>setAttempts(v=>({ ...v, [g]:Math.max(0,(+v[g]||0)+delta) }));
+  const bumpVolume=(g,delta)=>adjust("send",g,delta);
+  const bumpAttempts=(g,delta)=>adjust("attempt",g,delta);
 
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:50,overflowY:"auto"}}>
@@ -1424,6 +1598,97 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
             <div>
               <h2 className="disp" style={{fontSize:24,margin:"0 0 8px"}}>{session.focus}</h2>
               {session.note && <p style={{color:"var(--chalk-dim)",marginTop:0}}>{session.note}</p>}
+
+              {/* ---- Climb Mode: one big tap per climb ---- */}
+              <div className="card" style={{padding:14,marginTop:8,marginBottom:18,background:"linear-gradient(180deg,var(--surface2),var(--granite2))"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
+                  <div className="disp" style={{fontSize:16,color:"var(--rope)"}}>Log each climb</div>
+                  <div className="mono" style={{fontSize:13,color:"var(--chalk-dim)"}}>
+                    {Object.values(volume).reduce((a,n)=>a+(+n||0),0)} sends · {Object.values(attempts).reduce((a,n)=>a+(+n||0),0)} attempts
+                  </div>
+                </div>
+                {/* active grade for the big buttons */}
+                <div style={{display:"flex",gap:6,marginBottom:12}}>
+                  {[0,1,2,3,4,5].map(g=>{ const on=activeGrade===g;
+                    return (
+                      <button key={g} onClick={()=>setActiveGrade(g)} className="btn disp"
+                        style={{flex:1,minHeight:46,fontSize:17,borderRadius:11,
+                          background:on?"var(--rope)":"var(--surface)",color:on?"#1a120c":"var(--chalk)",
+                          border:`1px solid ${on?"var(--rope)":"var(--line)"}`}}>V{g}</button>
+                    );})}
+                </div>
+                {/* big send / attempt */}
+                <div style={{display:"flex",gap:10}}>
+                  <button onClick={()=>logClimb("send",activeGrade)} className="btn disp"
+                    style={{flex:2,minHeight:74,fontSize:22,borderRadius:14,background:"var(--rope)",color:"#1a120c",
+                      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2}}>
+                    <Check size={26}/>Send V{activeGrade}
+                  </button>
+                  <button onClick={()=>logClimb("attempt",activeGrade)} className="btn disp"
+                    style={{flex:1,minHeight:74,fontSize:16,borderRadius:14,background:"var(--surface)",color:"var(--test)",border:"1px solid var(--test)",
+                      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2}}>
+                    <Flame size={22}/>Attempt
+                  </button>
+                </div>
+                <button onClick={undoLast} disabled={history.length===0} className="btn btn-ghost"
+                  style={{width:"100%",padding:10,marginTop:10,opacity:history.length===0?.4:1,
+                    display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  <RotateCcw size={15}/>Undo last
+                </button>
+                {/* live per-grade strip */}
+                <div style={{display:"flex",gap:4,marginTop:12}}>
+                  {[0,1,2,3,4,5].map(g=>{ const n=+volume[g]||0, a=+attempts[g]||0;
+                    return (
+                      <div key={g} style={{flex:1,textAlign:"center"}}>
+                        <div className="mono" style={{fontSize:11,color:"var(--faint)"}}>V{g}</div>
+                        <div className="mono" style={{fontSize:14,color:n?"var(--rope)":"var(--faint)"}}>{n}</div>
+                        {a>0 && <div className="mono" style={{fontSize:10,color:"var(--test)"}}>+{a}</div>}
+                      </div>
+                    );})}
+                </div>
+              </div>
+
+              {/* ---- Lock-screen buttons (Android) ---- */}
+              {!editing && (
+              <div className="card" style={{padding:12,marginBottom:18,background:"var(--granite)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                  <div>
+                    <div className="disp" style={{fontSize:14,display:"flex",alignItems:"center",gap:6}}><Lock size={14} style={{color:"var(--rope)"}}/>Lock-screen buttons</div>
+                    <div style={{fontSize:12,color:"var(--faint)",marginTop:2}}>Log without unlocking · Android</div>
+                  </div>
+                  <button onClick={toggleLock} className="btn"
+                    style={{padding:"9px 16px",background:lockOn?"var(--moss)":"var(--surface)",color:lockOn?"#1a120c":"var(--chalk)",border:`1px solid ${lockOn?"var(--moss)":"var(--line)"}`}}>
+                    {lockOn?"On":"Enable"}
+                  </button>
+                </div>
+                {notifErr && <div style={{fontSize:12,color:"var(--deload)",marginTop:8}}>{notifErr}</div>}
+                <div style={{marginTop:12}}>
+                  <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0,marginBottom:6}}>Buttons — the day's grades · up to {maxLockButtons}</div>
+                  <div style={{display:"flex",gap:6}}>
+                    {[0,1,2,3,4,5].map(g=>{ const on=gradeButtons.includes(g);
+                      return (
+                        <button key={g} onClick={()=>toggleLockGrade(g)} className="btn disp"
+                          style={{flex:1,minHeight:40,fontSize:15,borderRadius:10,
+                            background:on?"var(--rope-soft)":"var(--surface)",color:on?"#1a120c":"var(--chalk-dim)",
+                            border:`1px solid ${on?"var(--rope)":"var(--line)"}`}}>V{g}</button>
+                      );})}
+                  </div>
+                </div>
+                <div style={{marginTop:12}}>
+                  <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0,marginBottom:6}}>A lock-screen tap logs a…</div>
+                  <div style={{display:"flex",gap:6}}>
+                    {[["send","Send"],["attempt","Attempt"]].map(([v,l])=>{ const on=lockKind===v; const col=v==="send"?"var(--rope)":"var(--test)";
+                      return (
+                        <button key={v} onClick={()=>updateLockConfig({logKind:v})} className="btn disp"
+                          style={{flex:1,minHeight:44,fontSize:15,borderRadius:11,
+                            background:on?col:"var(--surface)",color:on?"#1a120c":"var(--chalk)",
+                            border:`1px solid ${on?col:"var(--line)"}`}}>{l}</button>
+                      );})}
+                  </div>
+                </div>
+              </div>
+              )}
+
               {session.drills && session.drills.length>0 && (
                 <div className="stagger" style={{display:"flex",flexDirection:"column",gap:10,marginTop:16}}>
                   <div className="pill" style={{color:"var(--rope)",background:"transparent",padding:0,letterSpacing:".1em"}}>Drills to apply while climbing · tap for detail</div>
