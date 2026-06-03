@@ -1349,7 +1349,6 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
   // Browsers cap notification actions (Chrome/Android = 2), so the lock screen
   // can only ever show this many grade buttons.
   const maxLockButtons=(typeof Notification!=="undefined" && Notification.maxActions) || 2;
-  const [activeGrade,setActiveGrade]=useState(()=>{ const g=gradesForSession(session); return g[Math.floor(g.length/2)] ?? 1; });
   const [gradeButtons,setGradeButtons]=useState(()=>gradesForSession(session).slice(-maxLockButtons)); // lock-screen grades
   const [lockKind,setLockKind]=useState(()=>defaultLogKind(session));           // lock-screen mode
   const [lockOn,setLockOn]=useState(false);                                     // notification active?
@@ -1611,44 +1610,32 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
                     {Object.values(volume).reduce((a,n)=>a+(+n||0),0)} sends · {Object.values(attempts).reduce((a,n)=>a+(+n||0),0)} attempts
                   </div>
                 </div>
-                {/* active grade for the big buttons */}
-                <div style={{display:"flex",gap:6,marginBottom:12}}>
-                  {[0,1,2,3,4,5].map(g=>{ const on=activeGrade===g;
+                {/* one big Send + Attempt per difficulty — tap once, no grade picking */}
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {[0,1,2,3,4,5].map(g=>{ const sn=+volume[g]||0, an=+attempts[g]||0;
                     return (
-                      <button key={g} onClick={()=>setActiveGrade(g)} className="btn disp"
-                        style={{flex:1,minHeight:46,fontSize:17,borderRadius:11,
-                          background:on?"var(--rope)":"var(--surface)",color:on?"#1a120c":"var(--chalk)",
-                          border:`1px solid ${on?"var(--rope)":"var(--line)"}`}}>V{g}</button>
+                      <div key={g} style={{display:"flex",gap:8}}>
+                        <button onClick={()=>logClimb("send",g)} className="btn disp"
+                          style={{flex:1,minHeight:56,fontSize:18,borderRadius:12,background:"var(--rope)",color:"#1a120c",
+                            display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px"}}>
+                          <span style={{display:"flex",alignItems:"center",gap:8}}><Check size={20}/>Send V{g}</span>
+                          {sn>0 && <span className="mono" style={{fontSize:17}}>{sn}</span>}
+                        </button>
+                        <button onClick={()=>logClimb("attempt",g)} className="btn disp"
+                          style={{width:112,minHeight:56,fontSize:14,borderRadius:12,background:"var(--surface)",color:"var(--test)",border:"1px solid var(--test)",
+                            display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                          <Flame size={17}/>Try{an>0 && <span className="mono">· {an}</span>}
+                        </button>
+                      </div>
                     );})}
-                </div>
-                {/* big send / attempt */}
-                <div style={{display:"flex",gap:10}}>
-                  <button onClick={()=>logClimb("send",activeGrade)} className="btn disp"
-                    style={{flex:2,minHeight:74,fontSize:22,borderRadius:14,background:"var(--rope)",color:"#1a120c",
-                      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2}}>
-                    <Check size={26}/>Send V{activeGrade}
-                  </button>
-                  <button onClick={()=>logClimb("attempt",activeGrade)} className="btn disp"
-                    style={{flex:1,minHeight:74,fontSize:16,borderRadius:14,background:"var(--surface)",color:"var(--test)",border:"1px solid var(--test)",
-                      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2}}>
-                    <Flame size={22}/>Attempt
-                  </button>
                 </div>
                 <button onClick={undoLast} disabled={history.length===0} className="btn btn-ghost"
                   style={{width:"100%",padding:10,marginTop:10,opacity:history.length===0?.4:1,
                     display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                   <RotateCcw size={15}/>Undo last
                 </button>
-                {/* live per-grade strip */}
-                <div style={{display:"flex",gap:4,marginTop:12}}>
-                  {[0,1,2,3,4,5].map(g=>{ const n=+volume[g]||0, a=+attempts[g]||0;
-                    return (
-                      <div key={g} style={{flex:1,textAlign:"center"}}>
-                        <div className="mono" style={{fontSize:11,color:"var(--faint)"}}>V{g}</div>
-                        <div className="mono" style={{fontSize:14,color:n?"var(--rope)":"var(--faint)"}}>{n}</div>
-                        {a>0 && <div className="mono" style={{fontSize:10,color:"var(--test)"}}>+{a}</div>}
-                      </div>
-                    );})}
+                <div style={{fontSize:11,color:"var(--faint)",textAlign:"center",marginTop:10}}>
+                  Screen stays on during the session — set the phone down and tap, no unlocking.
                 </div>
               </div>
 
@@ -1666,6 +1653,11 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
                   </button>
                 </div>
                 {notifErr && <div style={{fontSize:12,color:"var(--deload)",marginTop:8}}>{notifErr}</div>}
+                {lockOn && (
+                  <div className="fadein" style={{fontSize:12,color:"var(--chalk-dim)",marginTop:10,lineHeight:1.5,background:"var(--surface)",border:"1px solid var(--line)",borderRadius:10,padding:"9px 11px"}}>
+                    On the lock screen, tap the <strong style={{color:"var(--chalk)"}}>grade buttons on the notification</strong> — not the notification itself (that just opens the app and asks you to unlock). If you don't see the buttons, pull the notification down to expand it.
+                  </div>
+                )}
                 <div style={{marginTop:12}}>
                   <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0,marginBottom:6}}>Buttons — the day's grades · up to {maxLockButtons}</div>
                   <div style={{display:"flex",gap:6}}>
