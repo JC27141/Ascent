@@ -7,8 +7,7 @@ import {
 } from "lucide-react";
 import { isCloudConfigured, supabase } from "./supabaseClient.js";
 import {
-  getActive, ensureActive, applyDelta, setConfig, clearActive,
-  subscribeLive, notificationOptions,
+  getActive, ensureActive, applyDelta, clearActive, subscribeLive,
 } from "./liveLog.js";
 
 /* ============================ THEME ============================ */
@@ -886,32 +885,6 @@ const fmtFullDate = (date) => {
 const PHASE_COLOR = { deload:"var(--deload)", test:"var(--test)", normal:"var(--rope)" };
 const CAT_ICON = { Shoulder:Wind, "Pull-ups":Dumbbell, Core:Activity, "Foot/Ankle":Footprints, Fingers:Hand, Technique:Mountain, Antagonist:Dumbbell };
 const logKey = (week, sid) => `${week}-${sid}`;
-// The 2-3 grades a session's plan text calls for — these seed the lock-screen
-// buttons. Parsed from the free-text focus/note (e.g. "many V0–V2",
-// "Projecting V4–V5"); ranges are expanded. It's a suggested default the user
-// can edit in Climb Mode, so an imperfect parse is fine.
-const gradesForSession = (session) => {
-  const text = `${session?.focus || ""} ${session?.note || ""}`;
-  const set = new Set();
-  const range = /V(\d+)\s*(?:[–—-]|to|\/)\s*V?(\d+)/gi;
-  let m;
-  while ((m = range.exec(text))) {
-    const a = +m[1], b = +m[2];
-    for (let g = Math.min(a, b); g <= Math.max(a, b); g++) set.add(g);
-  }
-  const single = /V(\d+)/gi;
-  while ((m = single.exec(text))) set.add(+m[1]);
-  let grades = [...set].filter((g) => g >= 0 && g <= 9).sort((a, b) => a - b);
-  if (grades.length === 0) grades = [0, 1, 2];
-  if (grades.length > 3) grades = grades.slice(-3); // keep the 3 hardest
-  return grades;
-};
-// Volume / technique days are mostly sends; projecting / max / test days are
-// mostly attempts. Used as the default for what a lock-screen grade tap logs.
-const defaultLogKind = (session) =>
-  /project|redpoint|performance|max|test|limit|flash to|attempt/i.test(session?.focus || "")
-    ? "attempt"
-    : "send";
 const addDays = (date, days) => {
   const d=parseLocalDate(date);
   d.setDate(d.getDate()+days);
@@ -1346,17 +1319,10 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
   /* ---- Climb Mode: live one-tap logging (a fresh, non-support session) ---- */
   const liveMode=!editing && session.id!=="support";
   useWakeLock(session.id!=="support"); // keep the screen on during climbing
-  // Browsers cap notification actions (Chrome/Android = 2), so the lock screen
-  // can only ever show this many grade buttons.
-  const maxLockButtons=(typeof Notification!=="undefined" && Notification.maxActions) || 2;
-  const [gradeButtons,setGradeButtons]=useState(()=>gradesForSession(session).slice(-maxLockButtons)); // lock-screen grades
-  const [lockKind,setLockKind]=useState(()=>defaultLogKind(session));           // lock-screen mode
-  const [lockOn,setLockOn]=useState(false);                                     // notification active?
-  const [history,setHistory]=useState([]);                                      // for Undo
-  const [notifErr,setNotifErr]=useState(null);
+  const [history,setHistory]=useState([]); // for Undo
 
-  // Resume an in-progress session (in-app + lock-screen taps already logged),
-  // or seed a fresh live record so the SW has context for notification taps.
+  // Resume an in-progress session (taps already logged survive a reload), or seed
+  // a fresh live record. The shared store keeps taps safe across backgrounding.
   useEffect(()=>{
     if(!liveMode) return;
     let cancelled=false;
@@ -1366,12 +1332,8 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
       if(rec){
         setVolume(rec.volumeByGrade||{});
         setAttempts(rec.attemptsByGrade||{});
-        if(rec.gradeButtons?.length) setGradeButtons(rec.gradeButtons);
-        if(rec.logKind) setLockKind(rec.logKind);
       } else {
         ensureActive(week,session.id,{
-          gradeButtons:gradesForSession(session),
-          logKind:defaultLogKind(session),
           volumeByGrade:existingLog?.volumeByGrade||{},
           attemptsByGrade:existingLog?.attemptsByGrade||{},
         });
@@ -1380,7 +1342,7 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
     return ()=>{ cancelled=true; };
   },[liveMode,week,session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Lock-screen taps land in the SW; it broadcasts the new counts here.
+  // Keep the live tally in sync if the shared store changes in another context.
   useEffect(()=>{
     if(!liveMode) return;
     return subscribeLive((data)=>{
@@ -1390,24 +1352,8 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
     });
   },[liveMode,week,session.id]);
 
-  const showNotif=async(rec)=>{
-    try{
-      const reg=await navigator.serviceWorker?.ready;
-      if(!reg||!rec) return;
-      const {title,options}=notificationOptions(rec);
-      await reg.showNotification(title,options);
-    }catch{ /* ignore */ }
-  };
-  const closeNotif=async()=>{
-    try{
-      const reg=await navigator.serviceWorker?.ready;
-      const ns=await reg?.getNotifications({tag:"ascent-climblog"});
-      ns?.forEach(n=>n.close());
-    }catch{ /* ignore */ }
-  };
   // Single source of truth for a count change: optimistic state + persist to the
-  // shared store (so the SW/notification stay in sync), then refresh from the
-  // authoritative record.
+  // shared store so taps survive backgrounding/reload, then refresh from the record.
   const adjust=async(kind,grade,delta)=>{
     if(kind==="attempt") setAttempts(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
     else setVolume(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
@@ -1415,13 +1361,16 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
       const rec=await applyDelta(week,session.id,kind,grade,delta);
       setVolume(rec.volumeByGrade||{});
       setAttempts(rec.attemptsByGrade||{});
-      if(lockOn) showNotif(rec);
     }
   };
   const logClimb=(kind,grade)=>{
     if(navigator.vibrate) navigator.vibrate(kind==="attempt"?[12,24,12]:24);
     setHistory(h=>[...h,{kind,grade}].slice(-100));
     adjust(kind,grade,1);
+  };
+  const removeOne=(kind,grade)=>{
+    if(navigator.vibrate) navigator.vibrate(8);
+    adjust(kind,grade,-1);
   };
   const undoLast=()=>{
     if(history.length===0) return;
@@ -1430,39 +1379,9 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
     if(navigator.vibrate) navigator.vibrate(10);
     adjust(lastAction.kind,lastAction.grade,-1);
   };
-  const updateLockConfig=async(next)=>{
-    const gb=next.gradeButtons??gradeButtons;
-    const lk=next.logKind??lockKind;
-    if(next.gradeButtons) setGradeButtons(next.gradeButtons);
-    if(next.logKind) setLockKind(next.logKind);
-    if(liveMode){
-      await setConfig(week,session.id,{gradeButtons:gb,logKind:lk});
-      if(lockOn){ const rec=await getActive(week,session.id); showNotif(rec); }
-    }
-  };
-  const toggleLockGrade=(g)=>{
-    const has=gradeButtons.includes(g);
-    if(!has && gradeButtons.length>=maxLockButtons) return; // device action cap
-    const next=has ? gradeButtons.filter(x=>x!==g) : [...gradeButtons,g].sort((a,b)=>a-b);
-    if(next.length===0) return; // keep at least one
-    updateLockConfig({gradeButtons:next});
-  };
-  const toggleLock=async()=>{
-    if(lockOn){ setLockOn(false); closeNotif(); return; }
-    if(typeof Notification==="undefined"){ setNotifErr("This device doesn't support notifications."); return; }
-    let perm=Notification.permission;
-    if(perm==="default") perm=await Notification.requestPermission();
-    if(perm!=="granted"){ setNotifErr("Allow notifications to use lock-screen buttons."); return; }
-    setNotifErr(null);
-    await setConfig(week,session.id,{gradeButtons,logKind:lockKind});
-    const rec=await getActive(week,session.id);
-    setLockOn(true);
-    if(setSettings) setSettings(s=>({...s,lockScreenLogging:true}));
-    showNotif(rec);
-  };
 
   const save=()=>{
-    if(liveMode){ clearActive(week,session.id); closeNotif(); }
+    if(liveMode) clearActive(week,session.id);
     onSave({status,rpe,pain,notes,routinesDone:rd,date:existingLog?.date || today(),amendedAt:existingLog?nowIso():existingLog?.amendedAt,volumeByGrade:volume,attemptsByGrade:attempts,screen:screen||null});
   };
   // Commit the live draft as the saved screen result and advance; auto-flag pain on concerning readings.
@@ -1614,18 +1533,26 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {[0,1,2,3,4,5].map(g=>{ const sn=+volume[g]||0, an=+attempts[g]||0;
                     return (
-                      <div key={g} style={{display:"flex",gap:8}}>
+                      <div key={g} style={{display:"flex",gap:6}}>
                         <button onClick={()=>logClimb("send",g)} className="btn disp"
                           style={{flex:1,minHeight:56,fontSize:18,borderRadius:12,background:"var(--rope)",color:"#1a120c",
                             display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px"}}>
                           <span style={{display:"flex",alignItems:"center",gap:8}}><Check size={20}/>Send V{g}</span>
                           {sn>0 && <span className="mono" style={{fontSize:17}}>{sn}</span>}
                         </button>
+                        {sn>0 && (
+                          <button onClick={()=>removeOne("send",g)} aria-label={`Remove a V${g} send`} className="btn"
+                            style={{width:40,minHeight:56,borderRadius:12,background:"var(--surface)",color:"var(--chalk-dim)",border:"1px solid var(--line)",fontSize:22,lineHeight:1,padding:0,flexShrink:0}}>−</button>
+                        )}
                         <button onClick={()=>logClimb("attempt",g)} className="btn disp"
-                          style={{width:112,minHeight:56,fontSize:14,borderRadius:12,background:"var(--surface)",color:"var(--test)",border:"1px solid var(--test)",
+                          style={{width:96,minHeight:56,fontSize:14,borderRadius:12,background:"var(--surface)",color:"var(--test)",border:"1px solid var(--test)",
                             display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                           <Flame size={17}/>Try{an>0 && <span className="mono">· {an}</span>}
                         </button>
+                        {an>0 && (
+                          <button onClick={()=>removeOne("attempt",g)} aria-label={`Remove a V${g} attempt`} className="btn"
+                            style={{width:40,minHeight:56,borderRadius:12,background:"var(--surface)",color:"var(--test)",border:"1px solid var(--test)",fontSize:22,lineHeight:1,padding:0,flexShrink:0}}>−</button>
+                        )}
                       </div>
                     );})}
                 </div>
@@ -1638,52 +1565,6 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
                   Screen stays on during the session — set the phone down and tap, no unlocking.
                 </div>
               </div>
-
-              {/* ---- Lock-screen buttons (Android) ---- */}
-              {!editing && (
-              <div className="card" style={{padding:12,marginBottom:18,background:"var(--granite)"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-                  <div>
-                    <div className="disp" style={{fontSize:14,display:"flex",alignItems:"center",gap:6}}><Lock size={14} style={{color:"var(--rope)"}}/>Lock-screen buttons</div>
-                    <div style={{fontSize:12,color:"var(--faint)",marginTop:2}}>Log without unlocking · Android</div>
-                  </div>
-                  <button onClick={toggleLock} className="btn"
-                    style={{padding:"9px 16px",background:lockOn?"var(--moss)":"var(--surface)",color:lockOn?"#1a120c":"var(--chalk)",border:`1px solid ${lockOn?"var(--moss)":"var(--line)"}`}}>
-                    {lockOn?"On":"Enable"}
-                  </button>
-                </div>
-                {notifErr && <div style={{fontSize:12,color:"var(--deload)",marginTop:8}}>{notifErr}</div>}
-                {lockOn && (
-                  <div className="fadein" style={{fontSize:12,color:"var(--chalk-dim)",marginTop:10,lineHeight:1.5,background:"var(--surface)",border:"1px solid var(--line)",borderRadius:10,padding:"9px 11px"}}>
-                    On the lock screen, tap the <strong style={{color:"var(--chalk)"}}>grade buttons on the notification</strong> — not the notification itself (that just opens the app and asks you to unlock). If you don't see the buttons, pull the notification down to expand it.
-                  </div>
-                )}
-                <div style={{marginTop:12}}>
-                  <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0,marginBottom:6}}>Buttons — the day's grades · up to {maxLockButtons}</div>
-                  <div style={{display:"flex",gap:6}}>
-                    {[0,1,2,3,4,5].map(g=>{ const on=gradeButtons.includes(g);
-                      return (
-                        <button key={g} onClick={()=>toggleLockGrade(g)} className="btn disp"
-                          style={{flex:1,minHeight:40,fontSize:15,borderRadius:10,
-                            background:on?"var(--rope-soft)":"var(--surface)",color:on?"#1a120c":"var(--chalk-dim)",
-                            border:`1px solid ${on?"var(--rope)":"var(--line)"}`}}>V{g}</button>
-                      );})}
-                  </div>
-                </div>
-                <div style={{marginTop:12}}>
-                  <div className="pill" style={{color:"var(--chalk-dim)",background:"transparent",padding:0,marginBottom:6}}>A lock-screen tap logs a…</div>
-                  <div style={{display:"flex",gap:6}}>
-                    {[["send","Send"],["attempt","Attempt"]].map(([v,l])=>{ const on=lockKind===v; const col=v==="send"?"var(--rope)":"var(--test)";
-                      return (
-                        <button key={v} onClick={()=>updateLockConfig({logKind:v})} className="btn disp"
-                          style={{flex:1,minHeight:44,fontSize:15,borderRadius:11,
-                            background:on?col:"var(--surface)",color:on?"#1a120c":"var(--chalk)",
-                            border:`1px solid ${on?col:"var(--line)"}`}}>{l}</button>
-                      );})}
-                  </div>
-                </div>
-              </div>
-              )}
 
               {session.drills && session.drills.length>0 && (
                 <div className="stagger" style={{display:"flex",flexDirection:"column",gap:10,marginTop:16}}>
