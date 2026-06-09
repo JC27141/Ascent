@@ -846,26 +846,91 @@ function saveAppData(next, opts={}){
   return stamped;
 }
 function exportBackup(data){ return JSON.stringify({ ...normalizeAppData(data), exportedAt:new Date().toISOString() }, null, 2); }
-function importBackup(json, current){
+function importBackup(json, current, mode="merge"){
   const parsed=JSON.parse(json);
-  // Legacy plan-only import (array of weeks at root)
+  // Legacy plan-only import (array of weeks at root) — only swaps the plan, never logs.
   if(parsed?.weeks && Array.isArray(parsed.weeks)){
     return { ok:true, data:normalizeAppData({ ...current, activeCycle:{ ...current.activeCycle, plan:parsed } }) };
   }
   // Full v2 backup (plan.weeks at root, no activeCycle)
+  let incoming;
   if(parsed?.plan?.weeks && !parsed?.activeCycle){
-    const migrated=migrateV2toV3(parsed);
-    return { ok:true, data:normalizeAppData({ ...migrated, completedCycles: current.completedCycles||[] }) };
+    incoming=normalizeAppData({ ...migrateV2toV3(parsed), completedCycles: current.completedCycles||[] });
+  } else {
+    // v3 backup
+    if(!parsed?.activeCycle?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
+    incoming=normalizeAppData({ ...current, ...parsed });
   }
-  // v3 backup
-  if(!parsed?.activeCycle?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
-  return { ok:true, data:normalizeAppData({ ...current, ...parsed }) };
+  // Default to a non-destructive union with what's already here, so importing a
+  // partial backup can only ADD entries. "replace" is opt-in for a clean restore.
+  const data = mode==="replace" ? incoming : mergeAppData(current, incoming);
+  return { ok:true, data };
 }
-function newestAppData(local, remote){
-  if(!remote) return normalizeAppData(local);
-  const l=normalizeAppData(local);
-  const r=normalizeAppData(remote);
-  return new Date(r.updatedAt) > new Date(l.updatedAt) ? r : l;
+// Field-level merge so a context holding only a SUBSET of the data (e.g. a device
+// that imported a single day) can never delete entries that exist only on the
+// other side. Logs/metrics/cycles/sends are unioned by key; on a per-key conflict
+// the blob with the newer top-level updatedAt wins. This replaces the old
+// whole-object last-write-wins, which silently wiped history.
+function mergeAppData(a, b){
+  if(!b) return normalizeAppData(a);
+  if(!a) return normalizeAppData(b);
+  const A=normalizeAppData(a), B=normalizeAppData(b);
+  const aNewer=new Date(A.updatedAt) >= new Date(B.updatedAt);
+  const primary=aNewer?A:B, secondary=aNewer?B:A;
+  const pc=primary.activeCycle, sc=secondary.activeCycle;
+  // Only merge the inner cycle data when both sides describe the SAME cycle;
+  // a different cycleId means a new cycle was started, so keep the newer one whole.
+  const sameCycle=pc.cycleId===sc.cycleId;
+  const logs = sameCycle ? { ...sc.logs, ...pc.logs } : { ...pc.logs };
+  const metricsByWeek={};
+  if(sameCycle) (sc.metrics||[]).forEach(m=>{ if(m&&m.week!=null) metricsByWeek[m.week]=m; });
+  (pc.metrics||[]).forEach(m=>{ if(m&&m.week!=null) metricsByWeek[m.week]=m; });
+  const metrics = sameCycle
+    ? Object.values(metricsByWeek).sort((x,y)=>x.week-y.week)
+    : pc.metrics;
+  const cyclesById={};
+  (secondary.completedCycles||[]).forEach(c=>{ if(c&&c.cycleId) cyclesById[c.cycleId]=c; });
+  (primary.completedCycles||[]).forEach(c=>{ if(c&&c.cycleId) cyclesById[c.cycleId]=c; });
+  const sends = { ...secondary.sends, ...primary.sends };
+  return normalizeAppData({
+    ...primary,
+    updatedAt: aNewer?A.updatedAt:B.updatedAt, // = max(A,B)
+    activeCycle: { ...pc, logs, metrics },
+    completedCycles: Object.values(cyclesById),
+    sends,
+  });
+}
+// Cheap equality over just the parts a merge can change, used to skip needless
+// re-applies (and the realtime echo loop) when a merge yields nothing new.
+function sameLogData(a, b){
+  const sig=(d)=>JSON.stringify({
+    u:d.updatedAt,
+    l:d.activeCycle?.logs||{},
+    m:d.activeCycle?.metrics||[],
+    c:(d.completedCycles||[]).map(x=>x.cycleId).sort(),
+    s:d.sends||{},
+  });
+  return sig(a)===sig(b);
+}
+// Rolling local snapshots taken right before any wholesale state replacement, so a
+// bad merge/import is always recoverable from this device even if the cloud is gone.
+const BACKUP_PREFIX="ascent_app_data_bak_";
+const MAX_BACKUPS=8;
+function snapshotLocal(reason){
+  if(!canUseStorage()) return;
+  try{
+    const cur=window.localStorage.getItem(APP_DATA_KEY);
+    if(!cur) return;
+    writeJson(`${BACKUP_PREFIX}${Date.now()}`,{reason,savedAt:nowIso(),data:JSON.parse(cur)});
+    const keys=Object.keys(window.localStorage).filter(k=>k.startsWith(BACKUP_PREFIX)).sort();
+    while(keys.length>MAX_BACKUPS){ window.localStorage.removeItem(keys.shift()); }
+  }catch{ /* snapshots are best-effort */ }
+}
+function listSnapshots(){
+  if(!canUseStorage()) return [];
+  return Object.keys(window.localStorage).filter(k=>k.startsWith(BACKUP_PREFIX)).sort().reverse()
+    .map(k=>{ try{ return { key:k, ...JSON.parse(window.localStorage.getItem(k)) }; }catch{ return null; } })
+    .filter(Boolean);
 }
 
 /* ============================ HELPERS ============================ */
@@ -2439,14 +2504,18 @@ export default function App(){
       if(!active) return;
       if(error){ setSyncStatus("error"); console.error("Supabase load failed", error); return; }
       const remote=row?.data ? normalizeAppData({ ...row.data, updatedAt:row.data.updatedAt || row.updated_at }) : null;
-      if(remote && new Date(remote.updatedAt) > new Date(local.updatedAt)){
+      // Field-level union of local + remote: nothing on either side is ever
+      // dropped. Apply locally if the merge changed our copy, and push the
+      // merged result back so the cloud heals too.
+      const merged=mergeAppData(local, remote);
+      if(remote && !sameLogData(merged, local)){
+        snapshotLocal("cloud-hydrate");
         applyingRemoteRef.current=true;
-        applyAppData(remote);
-        saveAppData(remote,{touch:false});
-        setSyncStatus("synced");
-        return;
+        applyAppData(merged);
+        saveAppData(merged,{touch:false});
       }
-      await pushCloudData(newestAppData(local, remote));
+      await pushCloudData(merged);
+      setSyncStatus("synced");
     };
     hydrateFromCloud();
     return ()=>{ active=false; };
@@ -2475,8 +2544,8 @@ export default function App(){
   },[session?.user?.id]);
   // Live cross-device sync: subscribe to this user's app_state row so an edit on
   // one device (e.g. the phone) is applied here the moment it lands in Postgres,
-  // without waiting for a reload or reconnect. Our own writes echo back too, but
-  // the updatedAt comparison skips anything not strictly newer than local.
+  // without waiting for a reload or reconnect. Our own writes echo back too, so we
+  // merge field-by-field and only re-apply when the union actually adds something.
   useEffect(()=>{
     if(!isCloudConfigured || !authReady || !session?.user) return;
     const userId=session.user.id;
@@ -2484,10 +2553,12 @@ export default function App(){
       if(!row?.data) return;
       const remote=normalizeAppData({ ...row.data, updatedAt:row.data.updatedAt || row.updated_at });
       const local=loadAppData();
-      if(new Date(remote.updatedAt) > new Date(local.updatedAt)){
+      const merged=mergeAppData(local, remote);
+      if(!sameLogData(merged, local)){
+        snapshotLocal("cloud-realtime");
         applyingRemoteRef.current=true;
-        applyAppData(remote);
-        saveAppData(remote,{touch:false});
+        applyAppData(merged);
+        saveAppData(merged,{touch:false});
         setSyncStatus("synced");
       }
     };
@@ -3257,14 +3328,31 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
   const sc=data.activeCycle?.schedule||data.schedule||{};
   const [json,setJson]=useState("");
   const [msg,setMsg]=useState("");
+  const [importMode,setImportMode]=useState("merge");
+  const [snapshots,setSnapshots]=useState(()=>listSnapshots());
   const [blockDraft,setBlockDraft]=useState(JSON.stringify(sc.travelBlocks||[],null,2));
   const exportAll=()=>setJson(exportBackup(data));
   const importAll=()=>{
     try{
-      const result=importBackup(json,data);
-      if(result.ok){ onReplace(result.data); setBlockDraft(JSON.stringify((result.data.activeCycle?.schedule||result.data.schedule||{}).travelBlocks||[],null,2)); setMsg("✓ Backup imported"); }
+      if(importMode==="replace" && typeof window!=="undefined"
+        && !window.confirm("Replace mode overwrites your current data with the file. Anything not in the file is removed (a local snapshot is kept). Continue?")) return;
+      snapshotLocal("pre-import");
+      const result=importBackup(json,data,importMode);
+      if(result.ok){
+        onReplace(result.data);
+        setBlockDraft(JSON.stringify((result.data.activeCycle?.schedule||result.data.schedule||{}).travelBlocks||[],null,2));
+        setSnapshots(listSnapshots());
+        setMsg(importMode==="replace"?"✓ Backup imported (replaced)":"✓ Backup merged in");
+      }
     }
     catch(e){ setMsg("✗ "+e.message); }
+  };
+  const restoreSnapshot=(snap)=>{
+    if(typeof window!=="undefined" && !window.confirm(`Restore the snapshot from ${new Date(snap.savedAt).toLocaleString()}? Your current data is snapshotted first, then merged with this one.`)) return;
+    snapshotLocal("pre-restore");
+    onReplace(mergeAppData(data, snap.data));
+    setSnapshots(listSnapshots());
+    setMsg("✓ Snapshot restored (merged)");
   };
   const saveBlocks=()=>{
     try{
@@ -3307,8 +3395,38 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
           <button className="btn btn-ghost" style={{flex:1,padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={()=>{setPlan(DEFAULT_PLAN);setMsg("✓ Reset plan to default");}}><RefreshCw size={16}/>Reset plan</button>
         </div>
         <textarea className="tinput mono" rows={12} style={{fontSize:12}} placeholder='Paste a full backup or legacy plan JSON here…' value={json} onChange={e=>setJson(e.target.value)}/>
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          {[["merge","Merge (safe)"],["replace","Replace all"]].map(([m,label])=>(
+            <button key={m} className={`btn ${importMode===m?"btn-rope":"btn-ghost"}`} style={{flex:1,padding:9,fontSize:13}} onClick={()=>setImportMode(m)}>{label}</button>
+          ))}
+        </div>
+        <div style={{fontSize:12,color:"var(--faint)",marginTop:6,lineHeight:1.5}}>
+          {importMode==="merge"
+            ? "Merge only adds entries from the file — existing logs are never deleted."
+            : "Replace swaps your data for the file. Anything not in the file is removed."}
+        </div>
         <button className="btn btn-rope" style={{width:"100%",padding:12,marginTop:10,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={importAll}><Upload size={16}/>Import</button>
         {msg && <div style={{marginTop:10,fontSize:14,color:msg[0]==="✓"?"var(--moss)":"var(--rope)"}}>{msg}</div>}
+        {snapshots.length>0 && (
+          <div className="card" style={{padding:14,marginTop:16}}>
+            <div className="disp" style={{fontSize:14,color:"var(--rope)",marginBottom:4}}>Local snapshots</div>
+            <div style={{fontSize:12,color:"var(--faint)",marginBottom:10,lineHeight:1.5}}>
+              Automatic backups taken on this device right before any sync or import overwrote data. Restoring merges a snapshot back in — nothing is lost.
+            </div>
+            {snapshots.map(snap=>{
+              const logCount=Object.keys(snap.data?.activeCycle?.logs||{}).length;
+              return (
+                <div key={snap.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",borderTop:"1px solid var(--line)"}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13}}>{new Date(snap.savedAt).toLocaleString()}</div>
+                    <div className="mono" style={{fontSize:11,color:"var(--faint)"}}>{logCount} session log{logCount===1?"":"s"} · {snap.reason||"snapshot"}</div>
+                  </div>
+                  <button className="btn btn-ghost" style={{padding:"6px 10px",fontSize:12,flexShrink:0}} onClick={()=>restoreSnapshot(snap)}>Restore</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
