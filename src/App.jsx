@@ -7,8 +7,12 @@ import {
 } from "lucide-react";
 import { isCloudConfigured, supabase } from "./supabaseClient.js";
 import {
-  getActive, ensureActive, applyDelta, clearActive, subscribeLive,
+  getActive, ensureActive, applyDelta, replaceActiveCounts, clearActive, subscribeLive,
 } from "./liveLog.js";
+import {
+  isNativeLockLog, startLockLog, incrementLockLog, getLockCounts, stopLockLog,
+  onLockLogChanged, onAppResume,
+} from "./native/climbLog.js";
 
 /* ============================ THEME ============================ */
 const STYLE = `
@@ -18,7 +22,10 @@ const STYLE = `
   --line:#46392b; --chalk:#f3ece0; --chalk-dim:#b6a890; --faint:#7d6f5b;
   --rope:#d4673a; --rope-soft:#a44e2c; --deload:#d99a2b; --test:#6699b3; --moss:#9bab63;
   --sab:env(safe-area-inset-bottom,0px);
+  --sat:env(safe-area-inset-top,0px);
+  --native-top-cushion:0px;
 }
+html.native-android{--native-top-cushion:32px;}
 html,body,#root{margin:0;width:100%;min-height:100%;background:var(--granite);}
 html,body{height:100%;overflow-x:hidden;}
 #root{min-height:100vh;}
@@ -75,6 +82,10 @@ input[type=range]{accent-color:var(--rope);}
 @keyframes demoDash{to{stroke-dashoffset:-42;}}
 @media (prefers-reduced-motion: reduce){.demo-pulse,.demo-step,.demo-slow,.demo-swing,.demo-lower,.demo-raise,.demo-reach,.demo-knee,.demo-breathe,.demo-dash{animation:none;}}
 `;
+
+if (typeof document !== "undefined" && isNativeLockLog) {
+  document.documentElement.classList.add("native-android");
+}
 
 /* ============================ SEED PLAN ============================ */
 const EX = [
@@ -846,26 +857,91 @@ function saveAppData(next, opts={}){
   return stamped;
 }
 function exportBackup(data){ return JSON.stringify({ ...normalizeAppData(data), exportedAt:new Date().toISOString() }, null, 2); }
-function importBackup(json, current){
+function importBackup(json, current, mode="merge"){
   const parsed=JSON.parse(json);
-  // Legacy plan-only import (array of weeks at root)
+  // Legacy plan-only import (array of weeks at root) — only swaps the plan, never logs.
   if(parsed?.weeks && Array.isArray(parsed.weeks)){
     return { ok:true, data:normalizeAppData({ ...current, activeCycle:{ ...current.activeCycle, plan:parsed } }) };
   }
   // Full v2 backup (plan.weeks at root, no activeCycle)
+  let incoming;
   if(parsed?.plan?.weeks && !parsed?.activeCycle){
-    const migrated=migrateV2toV3(parsed);
-    return { ok:true, data:normalizeAppData({ ...migrated, completedCycles: current.completedCycles||[] }) };
+    incoming=normalizeAppData({ ...migrateV2toV3(parsed), completedCycles: current.completedCycles||[] });
+  } else {
+    // v3 backup
+    if(!parsed?.activeCycle?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
+    incoming=normalizeAppData({ ...current, ...parsed });
   }
-  // v3 backup
-  if(!parsed?.activeCycle?.plan?.weeks) throw new Error("Backup needs either a plan weeks array or a full app backup.");
-  return { ok:true, data:normalizeAppData({ ...current, ...parsed }) };
+  // Default to a non-destructive union with what's already here, so importing a
+  // partial backup can only ADD entries. "replace" is opt-in for a clean restore.
+  const data = mode==="replace" ? incoming : mergeAppData(current, incoming);
+  return { ok:true, data };
 }
-function newestAppData(local, remote){
-  if(!remote) return normalizeAppData(local);
-  const l=normalizeAppData(local);
-  const r=normalizeAppData(remote);
-  return new Date(r.updatedAt) > new Date(l.updatedAt) ? r : l;
+// Field-level merge so a context holding only a SUBSET of the data (e.g. a device
+// that imported a single day) can never delete entries that exist only on the
+// other side. Logs/metrics/cycles/sends are unioned by key; on a per-key conflict
+// the blob with the newer top-level updatedAt wins. This replaces the old
+// whole-object last-write-wins, which silently wiped history.
+function mergeAppData(a, b){
+  if(!b) return normalizeAppData(a);
+  if(!a) return normalizeAppData(b);
+  const A=normalizeAppData(a), B=normalizeAppData(b);
+  const aNewer=new Date(A.updatedAt) >= new Date(B.updatedAt);
+  const primary=aNewer?A:B, secondary=aNewer?B:A;
+  const pc=primary.activeCycle, sc=secondary.activeCycle;
+  // Only merge the inner cycle data when both sides describe the SAME cycle;
+  // a different cycleId means a new cycle was started, so keep the newer one whole.
+  const sameCycle=pc.cycleId===sc.cycleId;
+  const logs = sameCycle ? { ...sc.logs, ...pc.logs } : { ...pc.logs };
+  const metricsByWeek={};
+  if(sameCycle) (sc.metrics||[]).forEach(m=>{ if(m&&m.week!=null) metricsByWeek[m.week]=m; });
+  (pc.metrics||[]).forEach(m=>{ if(m&&m.week!=null) metricsByWeek[m.week]=m; });
+  const metrics = sameCycle
+    ? Object.values(metricsByWeek).sort((x,y)=>x.week-y.week)
+    : pc.metrics;
+  const cyclesById={};
+  (secondary.completedCycles||[]).forEach(c=>{ if(c&&c.cycleId) cyclesById[c.cycleId]=c; });
+  (primary.completedCycles||[]).forEach(c=>{ if(c&&c.cycleId) cyclesById[c.cycleId]=c; });
+  const sends = { ...secondary.sends, ...primary.sends };
+  return normalizeAppData({
+    ...primary,
+    updatedAt: aNewer?A.updatedAt:B.updatedAt, // = max(A,B)
+    activeCycle: { ...pc, logs, metrics },
+    completedCycles: Object.values(cyclesById),
+    sends,
+  });
+}
+// Cheap equality over just the parts a merge can change, used to skip needless
+// re-applies (and the realtime echo loop) when a merge yields nothing new.
+function sameLogData(a, b){
+  const sig=(d)=>JSON.stringify({
+    u:d.updatedAt,
+    l:d.activeCycle?.logs||{},
+    m:d.activeCycle?.metrics||[],
+    c:(d.completedCycles||[]).map(x=>x.cycleId).sort(),
+    s:d.sends||{},
+  });
+  return sig(a)===sig(b);
+}
+// Rolling local snapshots taken right before any wholesale state replacement, so a
+// bad merge/import is always recoverable from this device even if the cloud is gone.
+const BACKUP_PREFIX="ascent_app_data_bak_";
+const MAX_BACKUPS=8;
+function snapshotLocal(reason){
+  if(!canUseStorage()) return;
+  try{
+    const cur=window.localStorage.getItem(APP_DATA_KEY);
+    if(!cur) return;
+    writeJson(`${BACKUP_PREFIX}${Date.now()}`,{reason,savedAt:nowIso(),data:JSON.parse(cur)});
+    const keys=Object.keys(window.localStorage).filter(k=>k.startsWith(BACKUP_PREFIX)).sort();
+    while(keys.length>MAX_BACKUPS){ window.localStorage.removeItem(keys.shift()); }
+  }catch{ /* snapshots are best-effort */ }
+}
+function listSnapshots(){
+  if(!canUseStorage()) return [];
+  return Object.keys(window.localStorage).filter(k=>k.startsWith(BACKUP_PREFIX)).sort().reverse()
+    .map(k=>{ try{ return { key:k, ...JSON.parse(window.localStorage.getItem(k)) }; }catch{ return null; } })
+    .filter(Boolean);
 }
 
 /* ============================ HELPERS ============================ */
@@ -1320,6 +1396,7 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
   const liveMode=!editing && session.id!=="support";
   useWakeLock(session.id!=="support"); // keep the screen on during climbing
   const [history,setHistory]=useState([]); // for Undo
+  const [lockOn,setLockOn]=useState(false); // native Android lock-screen notification active?
 
   // Resume an in-progress session (taps already logged survive a reload), or seed
   // a fresh live record. The shared store keeps taps safe across backgrounding.
@@ -1352,16 +1429,64 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
     });
   },[liveMode,week,session.id]);
 
+  // --- Native Android lock-screen logging (no-ops on web) ---
+  // Resume sync: on mount and whenever the app returns to foreground, pull the
+  // authoritative native counts (covers taps made while backgrounded/locked).
+  useEffect(()=>{
+    if(!liveMode || !isNativeLockLog) return;
+    let cancelled=false;
+    const pull=async()=>{
+      const c=await getLockCounts(week,session.id);
+      if(cancelled || !c) return;
+      const vol=c.volumeByGrade||{}, att=c.attemptsByGrade||{};
+      if(Object.keys(vol).length || Object.keys(att).length){
+        setVolume(vol); setAttempts(att); setLockOn(true);
+        replaceActiveCounts(week,session.id,{volumeByGrade:vol,attemptsByGrade:att});
+      }
+    };
+    pull();
+    const offChanged=onLockLogChanged((c)=>{
+      const vol=c.volumeByGrade||{}, att=c.attemptsByGrade||{};
+      setVolume(vol); setAttempts(att);
+      replaceActiveCounts(week,session.id,{volumeByGrade:vol,attemptsByGrade:att});
+    });
+    const offResume=onAppResume(pull);
+    return ()=>{ cancelled=true; offChanged(); offResume(); };
+  },[liveMode,week,session.id]);
+
   // Single source of truth for a count change: optimistic state + persist to the
   // shared store so taps survive backgrounding/reload, then refresh from the record.
   const adjust=async(kind,grade,delta)=>{
-    if(kind==="attempt") setAttempts(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
-    else setVolume(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
-    if(liveMode){
+    const fallback=async()=>{
       const rec=await applyDelta(week,session.id,kind,grade,delta);
       setVolume(rec.volumeByGrade||{});
       setAttempts(rec.attemptsByGrade||{});
+    };
+    if(liveMode){
+      if(lockOn){
+        const c=await incrementLockLog(week,session.id,kind,grade,delta);
+        if(c){
+          const vol=c.volumeByGrade||{}, att=c.attemptsByGrade||{};
+          setVolume(vol); setAttempts(att);
+          replaceActiveCounts(week,session.id,{volumeByGrade:vol,attemptsByGrade:att});
+        } else {
+          console.warn("Native lock-screen log update failed; falling back to web store");
+          await fallback();
+        }
+      } else {
+        if(kind==="attempt") setAttempts(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
+        else setVolume(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
+        await fallback();
+      }
+    } else {
+      if(kind==="attempt") setAttempts(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
+      else setVolume(v=>({...v,[grade]:Math.max(0,(+v[grade]||0)+delta)}));
     }
+  };
+  const toggleNativeLock=async()=>{
+    if(lockOn){ await stopLockLog(week,session.id); setLockOn(false); return; }
+    await startLockLog({week,sessionId:session.id,volumeByGrade:volume,attemptsByGrade:attempts});
+    setLockOn(true);
   };
   const logClimb=(kind,grade)=>{
     if(navigator.vibrate) navigator.vibrate(kind==="attempt"?[12,24,12]:24);
@@ -1381,7 +1506,7 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
   };
 
   const save=()=>{
-    if(liveMode) clearActive(week,session.id);
+    if(liveMode){ clearActive(week,session.id); if(lockOn) stopLockLog(week,session.id); }
     onSave({status,rpe,pain,notes,routinesDone:rd,date:existingLog?.date || today(),amendedAt:existingLog?nowIso():existingLog?.amendedAt,volumeByGrade:volume,attemptsByGrade:attempts,screen:screen||null});
   };
   // Commit the live draft as the saved screen result and advance; auto-flag pain on concerning readings.
@@ -1397,7 +1522,7 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:50,overflowY:"auto"}}>
       {d && <DrillSheetV2 name={d} onClose={()=>setD(null)}/>}
-      <div style={{position:"relative",zIndex:1,maxWidth:520,margin:"0 auto",padding:"18px 16px calc(40px + var(--sab))"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:520,margin:"0 auto",padding:"calc(18px + var(--sat) + var(--native-top-cushion)) 16px calc(40px + var(--sab))"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
           <div>
             <div className="pill" style={{background:"var(--surface2)",color:"var(--chalk-dim)",display:"inline-block"}}>Week {week} · {session.day}</div>
@@ -1564,6 +1689,20 @@ function Runner({ week, session, onClose, onSave, onDelete, spacingWarn, existin
                 <div style={{fontSize:11,color:"var(--faint)",textAlign:"center",marginTop:10}}>
                   Screen stays on during the session — set the phone down and tap, no unlocking.
                 </div>
+                {isNativeLockLog && (
+                  <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--line)"}}>
+                    <button onClick={toggleNativeLock} className="btn"
+                      style={{width:"100%",minHeight:48,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+                        background:lockOn?"var(--moss)":"var(--surface)",color:lockOn?"#1a120c":"var(--chalk)",border:`1px solid ${lockOn?"var(--moss)":"var(--line)"}`}}>
+                      <Lock size={16}/>{lockOn?"Lock-screen buttons on":"Enable lock-screen buttons"}
+                    </button>
+                    {lockOn && (
+                      <div style={{fontSize:11,color:"var(--faint)",textAlign:"center",marginTop:8,lineHeight:1.5}}>
+                        Lock the phone, pull the notification down to expand it, and tap a grade — no unlocking.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {session.drills && session.drills.length>0 && (
@@ -2142,7 +2281,7 @@ function PlanCompletionModal({ plan, logs, metrics, schedule, completedCycles, o
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:75,overflowY:"auto"}}>
       <style>{STYLE}</style>
-      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px calc(80px + var(--sab))"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"calc(20px + var(--sat) + var(--native-top-cushion)) 16px calc(80px + var(--sab))"}}>
 
         {stage==="celebration" && (
           <div className="fadein stagger">
@@ -2247,7 +2386,7 @@ function CycleHistoryView({ completedCycles, onClose }){
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:60,overflowY:"auto"}}>
       <style>{STYLE}</style>
-      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px calc(60px + var(--sab))"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"calc(20px + var(--sat) + var(--native-top-cushion)) 16px calc(60px + var(--sab))"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
           <button className="btn btn-ghost" style={{padding:8}} onClick={onClose}><ChevronLeft size={16}/></button>
           <h2 className="disp" style={{fontSize:22,margin:0}}>Training history</h2>
@@ -2439,14 +2578,18 @@ export default function App(){
       if(!active) return;
       if(error){ setSyncStatus("error"); console.error("Supabase load failed", error); return; }
       const remote=row?.data ? normalizeAppData({ ...row.data, updatedAt:row.data.updatedAt || row.updated_at }) : null;
-      if(remote && new Date(remote.updatedAt) > new Date(local.updatedAt)){
+      // Field-level union of local + remote: nothing on either side is ever
+      // dropped. Apply locally if the merge changed our copy, and push the
+      // merged result back so the cloud heals too.
+      const merged=mergeAppData(local, remote);
+      if(remote && !sameLogData(merged, local)){
+        snapshotLocal("cloud-hydrate");
         applyingRemoteRef.current=true;
-        applyAppData(remote);
-        saveAppData(remote,{touch:false});
-        setSyncStatus("synced");
-        return;
+        applyAppData(merged);
+        saveAppData(merged,{touch:false});
       }
-      await pushCloudData(newestAppData(local, remote));
+      await pushCloudData(merged);
+      setSyncStatus("synced");
     };
     hydrateFromCloud();
     return ()=>{ active=false; };
@@ -2475,8 +2618,8 @@ export default function App(){
   },[session?.user?.id]);
   // Live cross-device sync: subscribe to this user's app_state row so an edit on
   // one device (e.g. the phone) is applied here the moment it lands in Postgres,
-  // without waiting for a reload or reconnect. Our own writes echo back too, but
-  // the updatedAt comparison skips anything not strictly newer than local.
+  // without waiting for a reload or reconnect. Our own writes echo back too, so we
+  // merge field-by-field and only re-apply when the union actually adds something.
   useEffect(()=>{
     if(!isCloudConfigured || !authReady || !session?.user) return;
     const userId=session.user.id;
@@ -2484,10 +2627,12 @@ export default function App(){
       if(!row?.data) return;
       const remote=normalizeAppData({ ...row.data, updatedAt:row.data.updatedAt || row.updated_at });
       const local=loadAppData();
-      if(new Date(remote.updatedAt) > new Date(local.updatedAt)){
+      const merged=mergeAppData(local, remote);
+      if(!sameLogData(merged, local)){
+        snapshotLocal("cloud-realtime");
         applyingRemoteRef.current=true;
-        applyAppData(remote);
-        saveAppData(remote,{touch:false});
+        applyAppData(merged);
+        saveAppData(merged,{touch:false});
         setSyncStatus("synced");
       }
     };
@@ -2613,7 +2758,7 @@ export default function App(){
         onClose={()=>setRunner(null)} onSave={d=>saveLog(runner.week,runner.session.id,d)}
         onDelete={()=>deleteLog(runner.week,runner.session.id)}/>}
 
-      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px calc(100px + var(--sab))"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"calc(20px + var(--sat) + var(--native-top-cushion)) 16px calc(100px + var(--sab))"}}>
         {/* header */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -3257,14 +3402,31 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
   const sc=data.activeCycle?.schedule||data.schedule||{};
   const [json,setJson]=useState("");
   const [msg,setMsg]=useState("");
+  const [importMode,setImportMode]=useState("merge");
+  const [snapshots,setSnapshots]=useState(()=>listSnapshots());
   const [blockDraft,setBlockDraft]=useState(JSON.stringify(sc.travelBlocks||[],null,2));
   const exportAll=()=>setJson(exportBackup(data));
   const importAll=()=>{
     try{
-      const result=importBackup(json,data);
-      if(result.ok){ onReplace(result.data); setBlockDraft(JSON.stringify((result.data.activeCycle?.schedule||result.data.schedule||{}).travelBlocks||[],null,2)); setMsg("✓ Backup imported"); }
+      if(importMode==="replace" && typeof window!=="undefined"
+        && !window.confirm("Replace mode overwrites your current data with the file. Anything not in the file is removed (a local snapshot is kept). Continue?")) return;
+      snapshotLocal("pre-import");
+      const result=importBackup(json,data,importMode);
+      if(result.ok){
+        onReplace(result.data);
+        setBlockDraft(JSON.stringify((result.data.activeCycle?.schedule||result.data.schedule||{}).travelBlocks||[],null,2));
+        setSnapshots(listSnapshots());
+        setMsg(importMode==="replace"?"✓ Backup imported (replaced)":"✓ Backup merged in");
+      }
     }
     catch(e){ setMsg("✗ "+e.message); }
+  };
+  const restoreSnapshot=(snap)=>{
+    if(typeof window!=="undefined" && !window.confirm(`Restore the snapshot from ${new Date(snap.savedAt).toLocaleString()}? Your current data is snapshotted first, then merged with this one.`)) return;
+    snapshotLocal("pre-restore");
+    onReplace(mergeAppData(data, snap.data));
+    setSnapshots(listSnapshots());
+    setMsg("✓ Snapshot restored (merged)");
   };
   const saveBlocks=()=>{
     try{
@@ -3276,7 +3438,7 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
   };
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:60,overflowY:"auto"}}>
-      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px calc(40px + var(--sab))"}}>
+      <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"calc(20px + var(--sat) + var(--native-top-cushion)) 16px calc(40px + var(--sab))"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h2 className="disp" style={{fontSize:22,margin:0}}>Manage plan</h2>
           <button className="btn btn-ghost" style={{padding:8}} onClick={onClose}><X size={18}/></button>
@@ -3307,8 +3469,38 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
           <button className="btn btn-ghost" style={{flex:1,padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={()=>{setPlan(DEFAULT_PLAN);setMsg("✓ Reset plan to default");}}><RefreshCw size={16}/>Reset plan</button>
         </div>
         <textarea className="tinput mono" rows={12} style={{fontSize:12}} placeholder='Paste a full backup or legacy plan JSON here…' value={json} onChange={e=>setJson(e.target.value)}/>
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          {[["merge","Merge (safe)"],["replace","Replace all"]].map(([m,label])=>(
+            <button key={m} className={`btn ${importMode===m?"btn-rope":"btn-ghost"}`} style={{flex:1,padding:9,fontSize:13}} onClick={()=>setImportMode(m)}>{label}</button>
+          ))}
+        </div>
+        <div style={{fontSize:12,color:"var(--faint)",marginTop:6,lineHeight:1.5}}>
+          {importMode==="merge"
+            ? "Merge only adds entries from the file — existing logs are never deleted."
+            : "Replace swaps your data for the file. Anything not in the file is removed."}
+        </div>
         <button className="btn btn-rope" style={{width:"100%",padding:12,marginTop:10,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={importAll}><Upload size={16}/>Import</button>
         {msg && <div style={{marginTop:10,fontSize:14,color:msg[0]==="✓"?"var(--moss)":"var(--rope)"}}>{msg}</div>}
+        {snapshots.length>0 && (
+          <div className="card" style={{padding:14,marginTop:16}}>
+            <div className="disp" style={{fontSize:14,color:"var(--rope)",marginBottom:4}}>Local snapshots</div>
+            <div style={{fontSize:12,color:"var(--faint)",marginBottom:10,lineHeight:1.5}}>
+              Automatic backups taken on this device right before any sync or import overwrote data. Restoring merges a snapshot back in — nothing is lost.
+            </div>
+            {snapshots.map(snap=>{
+              const logCount=Object.keys(snap.data?.activeCycle?.logs||{}).length;
+              return (
+                <div key={snap.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",borderTop:"1px solid var(--line)"}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13}}>{new Date(snap.savedAt).toLocaleString()}</div>
+                    <div className="mono" style={{fontSize:11,color:"var(--faint)"}}>{logCount} session log{logCount===1?"":"s"} · {snap.reason||"snapshot"}</div>
+                  </div>
+                  <button className="btn btn-ghost" style={{padding:"6px 10px",fontSize:12,flexShrink:0}} onClick={()=>restoreSnapshot(snap)}>Restore</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
