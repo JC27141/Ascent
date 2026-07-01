@@ -70,15 +70,24 @@ The app is still mostly single-file. That is acceptable for the current small co
 Persistence uses browser `localStorage` as the offline cache and Supabase as the authenticated cloud source when configured.
 
 - Current storage key: `ascent_app_data_v1`
-- Current `schemaVersion`: `2`
+- Current `schemaVersion`: `3`
 - Stored fields:
   - `updatedAt`
+  - `activeCycle`
+  - `completedCycles`
+  - `sends`
+  - `settings`
+- Active and completed cycle fields:
+  - `cycleId`
+  - `cycleNumber`
+  - `planTemplateId`
   - `plan`
   - `logs`
   - `metrics`
-  - `sends`
   - `schedule`
-  - `settings`
+  - `startedAt`
+  - `completedAt`
+  - `summary` on completed cycles
 - Schedule shape:
   - `startDate`
   - `preferredSessionDays`
@@ -109,6 +118,15 @@ Backup/import behavior:
 - Legacy plan-only JSON imports are supported and should not erase logs, metrics, sends, schedule, or settings.
 - Import/migration must not overwrite user training history unless validation succeeds.
 - Personal exported backup JSON files are ignored by `.gitignore` and should not be committed unless the user explicitly asks.
+
+Results export behavior:
+
+- Manage plan offers on-demand results CSV and JSON downloads separate from full backup/import.
+- Results exports include completed cycles plus the current active cycle.
+- Results CSV flattens workout logs and weekly metric checkpoints with cycle, week, session, date, status, RPE, sends by grade, attempts by grade, pain flags/text, sleep, pull-ups, flash grade, project grade, and notes.
+- Results JSON preserves normalized cycle result data: plan metadata, schedule context, logs, metrics, summaries, and `exportedAt`.
+- Results export is download-only and must not change `updatedAt`, local storage, or Supabase sync state.
+- Generated `ascent-results*.csv` and `ascent-results*.json` files are ignored by `.gitignore`.
 
 If `schemaVersion` changes, update this document in the same commit or an adjacent docs commit.
 
@@ -191,6 +209,7 @@ Verification checklist:
 - A change saved on one signed-in device appears on another open signed-in device within a second or two, with no reload (requires the realtime publication step in `supabase/schema.sql`).
 - Offline edits persist locally and sync after reconnect.
 - Supabase RLS blocks access to any other user's `app_state` row.
+- Manage plan results CSV and JSON exports include active and completed cycle results without changing saved app data.
 
 ## Maintenance Protocol
 

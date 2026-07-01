@@ -9,5 +9,7 @@ dev-dist/
 ascent-backup*.json
 training-backup*.json
 personal-backup*.json
+ascent-results*.csv
+ascent-results*.json
 
 .vercel

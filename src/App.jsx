@@ -1230,6 +1230,239 @@ function loggedSessionItems(plan, logs){
   }).filter(Boolean)).sort((a,b)=>(b.log.date||"").localeCompare(a.log.date||"") || b.week-a.week);
 }
 
+/* ============================ RESULTS EXPORT ============================ */
+const RESULT_BASE_GRADES = [0,1,2,3,4,5];
+const RESULT_CSV_COLUMNS = [
+  "record_type","cycle_status","cycle_number","cycle_id","plan_template_id","plan_name",
+  "cycle_started_at","cycle_completed_at","date","scheduled_date","week","phase","week_type",
+  "session_id","session_name","session_focus","status","rpe","session_pain","pain_notes",
+  "metric_pain","sleep_hours","pullups","flash_grade","project_grade","total_ascents",
+  "total_attempts","hardest_ascent","hardest_attempt","routines_done","notes","amended_at"
+];
+
+function exportSchedule(schedule){
+  return {
+    ...DEFAULT_SCHEDULE,
+    ...(schedule||{}),
+    preferredSessionDays:{
+      ...DEFAULT_SCHEDULE.preferredSessionDays,
+      ...(schedule?.preferredSessionDays||{}),
+    },
+    travelBlocks:Array.isArray(schedule?.travelBlocks) ? schedule.travelBlocks : [],
+    sessionOverrides:(schedule?.sessionOverrides&&typeof schedule.sessionOverrides==="object") ? schedule.sessionOverrides : {},
+    lastRescheduleUndo:schedule?.lastRescheduleUndo || null,
+  };
+}
+function normalizeResultCycle(cycle, cycleStatus, fallbackNumber){
+  const plan=cycle?.plan?.weeks ? cycle.plan : DEFAULT_PLAN;
+  const logs=normalizeLogs(cycle?.logs);
+  const metrics=Array.isArray(cycle?.metrics) ? cycle.metrics : [];
+  return {
+    cycleStatus,
+    cycleId:cycle?.cycleId || `${cycleStatus}-${fallbackNumber}`,
+    cycleNumber:+cycle?.cycleNumber || fallbackNumber,
+    planTemplateId:cycle?.planTemplateId || "unknown",
+    plan,
+    logs,
+    metrics,
+    schedule:exportSchedule(cycle?.schedule),
+    startedAt:cycle?.startedAt || "",
+    completedAt:cycle?.completedAt || null,
+    summary:cycle?.summary || computeCycleSummary(plan.weeks,logs,metrics),
+  };
+}
+function collectResultCycles(data){
+  const normalized=normalizeAppData(data);
+  const completed=(normalized.completedCycles||[]).map((cycle,index)=>normalizeResultCycle(cycle,"completed",index+1));
+  return [...completed, normalizeResultCycle(normalized.activeCycle,"active",completed.length+1)];
+}
+function gradeKeysFromMap(map){
+  return Object.keys(map||{}).map(g=>+g).filter(Number.isFinite);
+}
+function resultGrades(cycles){
+  const grades=new Set(RESULT_BASE_GRADES);
+  cycles.forEach(cycle=>Object.values(cycle.logs||{}).forEach(log=>{
+    gradeKeysFromMap(log.volumeByGrade).forEach(g=>grades.add(g));
+    gradeKeysFromMap(log.attemptsByGrade).forEach(g=>grades.add(g));
+  }));
+  return [...grades].sort((a,b)=>a-b);
+}
+function gradeStats(map){
+  const entries=Object.entries(map||{}).map(([g,n])=>[+g,+n||0]).filter(([g,n])=>Number.isFinite(g)&&n>0);
+  return {
+    total:entries.reduce((sum,[,n])=>sum+n,0),
+    hardest:entries.length ? Math.max(...entries.map(([g])=>g)) : "",
+  };
+}
+function resultCycleBase(cycle, recordType){
+  return {
+    record_type:recordType,
+    cycle_status:cycle.cycleStatus,
+    cycle_number:cycle.cycleNumber,
+    cycle_id:cycle.cycleId,
+    plan_template_id:cycle.planTemplateId,
+    plan_name:cycle.plan?.name || "",
+    cycle_started_at:cycle.startedAt,
+    cycle_completed_at:cycle.completedAt || "",
+  };
+}
+function plannedExportDate(schedule, weekNum, sid){
+  if(!schedule?.startDate || !weekNum || !sid) return "";
+  return scheduledDate(schedule,weekNum,sid);
+}
+function metricForWeek(cycle, weekNum){
+  return (cycle.metrics||[]).find(m=>+m.week===+weekNum);
+}
+function resultWorkoutRows(cycle, grades){
+  return Object.entries(cycle.logs||{}).map(([key,log])=>{
+    const [,weekPart,sid]=key.match(/^(\d+)-(.+)$/) || [];
+    const weekNum=+weekPart || "";
+    const week=cycle.plan?.weeks?.find(w=>w.week===weekNum);
+    const session=week?.sessions?.find(s=>s.id===sid);
+    const metric=metricForWeek(cycle,weekNum);
+    const ascents=gradeStats(log.volumeByGrade);
+    const attempts=gradeStats(log.attemptsByGrade);
+    const row={
+      ...resultCycleBase(cycle,"workout"),
+      date:log.date || "",
+      scheduled_date:plannedExportDate(cycle.schedule,weekNum,sid),
+      week:weekNum,
+      phase:week?.phase || "",
+      week_type:week?.type || "",
+      session_id:sid || "",
+      session_name:sessionTitle(session),
+      session_focus:session?.focus || "",
+      status:log.status || "",
+      rpe:log.rpe ?? "",
+      session_pain:log.pain ? "true" : "false",
+      pain_notes:log.pain ? (log.notes || "") : "",
+      metric_pain:metric?.pain || "",
+      sleep_hours:metric?.sleep ?? "",
+      pullups:metric?.pullups ?? "",
+      flash_grade:metric?.flash ?? "",
+      project_grade:metric?.project ?? "",
+      total_ascents:ascents.total,
+      total_attempts:attempts.total,
+      hardest_ascent:ascents.hardest,
+      hardest_attempt:attempts.hardest,
+      routines_done:Array.isArray(log.routinesDone) ? log.routinesDone.join("; ") : "",
+      notes:log.notes || "",
+      amended_at:log.amendedAt || "",
+    };
+    grades.forEach(g=>{
+      row[`ascents_v${g}`]=+(log.volumeByGrade?.[g]||0);
+      row[`attempts_v${g}`]=+(log.attemptsByGrade?.[g]||0);
+    });
+    return row;
+  });
+}
+function resultMetricRows(cycle, grades){
+  return (cycle.metrics||[]).map(metric=>{
+    const weekNum=+metric.week || "";
+    const week=cycle.plan?.weeks?.find(w=>w.week===weekNum);
+    const row={
+      ...resultCycleBase(cycle,"metric"),
+      date:metric.date || "",
+      scheduled_date:"",
+      week:weekNum,
+      phase:week?.phase || "",
+      week_type:week?.type || "",
+      session_id:"",
+      session_name:"",
+      session_focus:"",
+      status:"",
+      rpe:"",
+      session_pain:"",
+      pain_notes:"",
+      metric_pain:metric.pain || "",
+      sleep_hours:metric.sleep ?? "",
+      pullups:metric.pullups ?? "",
+      flash_grade:metric.flash ?? "",
+      project_grade:metric.project ?? "",
+      total_ascents:"",
+      total_attempts:"",
+      hardest_ascent:"",
+      hardest_attempt:"",
+      routines_done:"",
+      notes:"",
+      amended_at:metric.amendedAt || "",
+    };
+    grades.forEach(g=>{
+      row[`ascents_v${g}`]="";
+      row[`attempts_v${g}`]="";
+    });
+    return row;
+  });
+}
+function sortResultRows(rows){
+  return rows.sort((a,b)=>
+    (a.date||a.scheduled_date||"").localeCompare(b.date||b.scheduled_date||"") ||
+    (+a.week||0)-(+b.week||0) ||
+    String(a.record_type).localeCompare(String(b.record_type)) ||
+    String(a.session_id).localeCompare(String(b.session_id))
+  );
+}
+function csvEscape(value){
+  if(value==null) return "";
+  const text=String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g,'""')}"` : text;
+}
+function serializeCsv(columns, rows){
+  return [
+    columns.map(csvEscape).join(","),
+    ...rows.map(row=>columns.map(col=>csvEscape(row[col])).join(",")),
+  ].join("\r\n");
+}
+function exportResultsCsv(data){
+  const cycles=collectResultCycles(data);
+  const grades=resultGrades(cycles);
+  const gradeColumns=grades.flatMap(g=>[`ascents_v${g}`,`attempts_v${g}`]);
+  const rows=cycles.flatMap(cycle=>sortResultRows([
+    ...resultWorkoutRows(cycle,grades),
+    ...resultMetricRows(cycle,grades),
+  ]));
+  return serializeCsv([...RESULT_CSV_COLUMNS,...gradeColumns],rows);
+}
+function exportResultsJson(data){
+  const normalized=normalizeAppData(data);
+  return JSON.stringify({
+    exportType:"ascent-results",
+    sourceSchemaVersion:normalized.schemaVersion,
+    exportedAt:nowIso(),
+    cycles:collectResultCycles(normalized).map(cycle=>({
+      cycleStatus:cycle.cycleStatus,
+      cycleId:cycle.cycleId,
+      cycleNumber:cycle.cycleNumber,
+      planTemplateId:cycle.planTemplateId,
+      planName:cycle.plan?.name || "",
+      startedAt:cycle.startedAt,
+      completedAt:cycle.completedAt,
+      summary:cycle.summary,
+      schedule:cycle.schedule,
+      plan:cycle.plan,
+      logs:cycle.logs,
+      metrics:cycle.metrics,
+    })),
+  }, null, 2);
+}
+function downloadTextFile(filename, text, type){
+  if(typeof document === "undefined") return false;
+  const blob=new Blob([text],{type});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url;
+  link.download=filename;
+  link.style.display="none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(()=>URL.revokeObjectURL(url),0);
+  return true;
+}
+function resultExportFilename(ext){
+  return `ascent-results-${today()}.${ext}`;
+}
+
 /* ============================ TIMER ============================ */
 function Timer({ initial=60 }){
   const [sec,setSec]=useState(initial);
@@ -3332,6 +3565,14 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
   const [snapshots,setSnapshots]=useState(()=>listSnapshots());
   const [blockDraft,setBlockDraft]=useState(JSON.stringify(sc.travelBlocks||[],null,2));
   const exportAll=()=>setJson(exportBackup(data));
+  const downloadResultsCsv=()=>{
+    const ok=downloadTextFile(resultExportFilename("csv"),exportResultsCsv(data),"text/csv;charset=utf-8");
+    setMsg(ok ? "✓ Results CSV downloaded" : "Download unavailable");
+  };
+  const downloadResultsJson=()=>{
+    const ok=downloadTextFile(resultExportFilename("json"),exportResultsJson(data),"application/json;charset=utf-8");
+    setMsg(ok ? "✓ Results JSON downloaded" : "Download unavailable");
+  };
   const importAll=()=>{
     try{
       if(importMode==="replace" && typeof window!=="undefined"
@@ -3389,6 +3630,13 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
               placeholder='[{"label":"Victoria","startDate":"2026-06-20","endDate":"2026-06-27"}]'/>
           </Field>
           <button className="btn btn-ghost" style={{width:"100%",padding:10,marginTop:8}} onClick={saveBlocks}>Save travel blocks</button>
+        </div>
+        <div className="card" style={{padding:14,marginBottom:14}}>
+          <div className="disp" style={{fontSize:14,color:"var(--rope)",marginBottom:10}}>Results export</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:8}}>
+            <button className="btn btn-ghost" style={{padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={downloadResultsCsv}><Download size={16}/>Export results CSV</button>
+            <button className="btn btn-ghost" style={{padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={downloadResultsJson}><Download size={16}/>Export results JSON</button>
+          </div>
         </div>
         <div style={{display:"flex",gap:8,margin:"14px 0"}}>
           <button className="btn btn-ghost" style={{flex:1,padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={exportAll}><Download size={16}/>Export backup</button>
