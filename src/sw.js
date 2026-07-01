@@ -5,6 +5,9 @@
 //  2. Handle taps on the persistent climb-logging notification's grade actions
 //     so a send/attempt can be logged straight from a locked Android screen.
 //
+// The worker claims clients and navigates open windows on activation so installed
+// PWAs do not stay pinned to an old cached app shell after a production deploy.
+//
 // The critical detail for lock-screen logging: a grade tap NEVER calls
 // clients.openWindow(). Opening the app would force the phone to unlock. Instead
 // we just update IndexedDB (via the shared liveLog store) and re-post the
@@ -14,7 +17,15 @@ import { precacheAndRoute } from "workbox-precaching";
 import { applyDelta, getActive, notificationOptions } from "./liveLog.js";
 
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    await self.clients.claim();
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    await Promise.all(windows.map(client => (
+      "navigate" in client ? client.navigate(client.url).catch(() => {}) : Promise.resolve()
+    )));
+  })());
+});
 
 precacheAndRoute(self.__WB_MANIFEST || []);
 

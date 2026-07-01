@@ -206,6 +206,7 @@ Verification checklist:
 - Legacy plan-only import preserves history.
 - Per-session volume updates the global pyramid without double-counting edited sessions, and failed attempts persist separately by grade.
 - Production build generates `dist/manifest.webmanifest` and `dist/sw.js`.
+- The service worker claims clients and navigates open PWA windows on activation so installed phone apps pick up newly deployed app shells without uninstalling.
 - Signed-out users see the login screen when Supabase environment variables are present.
 - Signed-in users can sync data between desktop and phone.
 - A change saved on one signed-in device appears on another open signed-in device within a second or two, with no reload (requires the realtime publication step in `supabase/schema.sql`).
