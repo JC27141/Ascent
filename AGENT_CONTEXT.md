@@ -114,7 +114,9 @@ Persistence uses browser `localStorage` as the offline cache and Supabase as the
 
 Backup/import behavior:
 
-- Full export includes plan, logs, metrics, sends, schedule, settings, schema version, `updatedAt`, and export timestamp.
+- Full backup download includes plan, logs, metrics, sends, schedule, settings, schema version, `updatedAt`, and export timestamp.
+- Full backup JSON can also be shown in the Manage plan textarea as a fallback.
+- Backup import supports both a JSON file picker and pasted JSON, with the same merge/replace mode controls.
 - Legacy plan-only JSON imports are supported and should not erase logs, metrics, sends, schedule, or settings.
 - Import/migration must not overwrite user training history unless validation succeeds.
 - Personal exported backup JSON files are ignored by `.gitignore` and should not be committed unless the user explicitly asks.

@@ -1462,6 +1462,9 @@ function downloadTextFile(filename, text, type){
 function resultExportFilename(ext){
   return `ascent-results-${today()}.${ext}`;
 }
+function backupExportFilename(){
+  return `ascent-backup-${today()}.json`;
+}
 
 /* ============================ TIMER ============================ */
 function Timer({ initial=60 }){
@@ -3559,12 +3562,21 @@ function Library(){
 /* ============================ MANAGE (import/export) ============================ */
 function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
   const sc=data.activeCycle?.schedule||data.schedule||{};
+  const backupFileRef=useRef(null);
   const [json,setJson]=useState("");
   const [msg,setMsg]=useState("");
   const [importMode,setImportMode]=useState("merge");
   const [snapshots,setSnapshots]=useState(()=>listSnapshots());
   const [blockDraft,setBlockDraft]=useState(JSON.stringify(sc.travelBlocks||[],null,2));
-  const exportAll=()=>setJson(exportBackup(data));
+  const backupJson=()=>exportBackup(data);
+  const exportAll=()=>{
+    const ok=downloadTextFile(backupExportFilename(),backupJson(),"application/json;charset=utf-8");
+    setMsg(ok ? "✓ Backup file downloaded" : "Download unavailable");
+  };
+  const showBackupJson=()=>{
+    setJson(backupJson());
+    setMsg("✓ Backup JSON ready below");
+  };
   const downloadResultsCsv=()=>{
     const ok=downloadTextFile(resultExportFilename("csv"),exportResultsCsv(data),"text/csv;charset=utf-8");
     setMsg(ok ? "✓ Results CSV downloaded" : "Download unavailable");
@@ -3573,12 +3585,12 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
     const ok=downloadTextFile(resultExportFilename("json"),exportResultsJson(data),"application/json;charset=utf-8");
     setMsg(ok ? "✓ Results JSON downloaded" : "Download unavailable");
   };
-  const importAll=()=>{
+  const importJsonText=(backupText)=>{
     try{
       if(importMode==="replace" && typeof window!=="undefined"
         && !window.confirm("Replace mode overwrites your current data with the file. Anything not in the file is removed (a local snapshot is kept). Continue?")) return;
       snapshotLocal("pre-import");
-      const result=importBackup(json,data,importMode);
+      const result=importBackup(backupText,data,importMode);
       if(result.ok){
         onReplace(result.data);
         setBlockDraft(JSON.stringify((result.data.activeCycle?.schedule||result.data.schedule||{}).travelBlocks||[],null,2));
@@ -3587,6 +3599,17 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
       }
     }
     catch(e){ setMsg("✗ "+e.message); }
+  };
+  const importAll=()=>importJsonText(json);
+  const importBackupFile=async(e)=>{
+    const file=e.target.files?.[0];
+    if(!file) return;
+    try{
+      const text=await file.text();
+      importJsonText(text);
+    }
+    catch(err){ setMsg("Error: "+(err?.message||"Could not read backup file")); }
+    finally{ e.target.value=""; }
   };
   const restoreSnapshot=(snap)=>{
     if(typeof window!=="undefined" && !window.confirm(`Restore the snapshot from ${new Date(snap.savedAt).toLocaleString()}? Your current data is snapshotted first, then merged with this one.`)) return;
@@ -3606,6 +3629,7 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
   return (
     <div className="ct-root" style={{position:"fixed",inset:0,zIndex:60,overflowY:"auto"}}>
       <div style={{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 16px calc(40px + var(--sab))"}}>
+        <input ref={backupFileRef} type="file" accept=".json,application/json" style={{display:"none"}} onChange={importBackupFile}/>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h2 className="disp" style={{fontSize:22,margin:0}}>Manage plan</h2>
           <button className="btn btn-ghost" style={{padding:8}} onClick={onClose}><X size={18}/></button>
@@ -3638,11 +3662,12 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
             <button className="btn btn-ghost" style={{padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={downloadResultsJson}><Download size={16}/>Export results JSON</button>
           </div>
         </div>
-        <div style={{display:"flex",gap:8,margin:"14px 0"}}>
-          <button className="btn btn-ghost" style={{flex:1,padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={exportAll}><Download size={16}/>Export backup</button>
-          <button className="btn btn-ghost" style={{flex:1,padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={()=>{setPlan(DEFAULT_PLAN);setMsg("✓ Reset plan to default");}}><RefreshCw size={16}/>Reset plan</button>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:8,margin:"14px 0"}}>
+          <button className="btn btn-ghost" style={{padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={exportAll}><Download size={16}/>Download backup</button>
+          <button className="btn btn-ghost" style={{padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={showBackupJson}><Download size={16}/>Show JSON</button>
+          <button className="btn btn-ghost" style={{padding:11,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={()=>{setPlan(DEFAULT_PLAN);setMsg("✓ Reset plan to default");}}><RefreshCw size={16}/>Reset plan</button>
         </div>
-        <textarea className="tinput mono" rows={12} style={{fontSize:12}} placeholder='Paste a full backup or legacy plan JSON here…' value={json} onChange={e=>setJson(e.target.value)}/>
+        <textarea className="tinput mono" rows={12} style={{fontSize:12}} placeholder='Paste a full backup or legacy plan JSON here, or import a backup file below…' value={json} onChange={e=>setJson(e.target.value)}/>
         <div style={{display:"flex",gap:8,marginTop:10}}>
           {[["merge","Merge (safe)"],["replace","Replace all"]].map(([m,label])=>(
             <button key={m} className={`btn ${importMode===m?"btn-rope":"btn-ghost"}`} style={{flex:1,padding:9,fontSize:13}} onClick={()=>setImportMode(m)}>{label}</button>
@@ -3653,7 +3678,10 @@ function Manage({ data, onReplace, setPlan, setSchedule, onClose }){
             ? "Merge only adds entries from the file — existing logs are never deleted."
             : "Replace swaps your data for the file. Anything not in the file is removed."}
         </div>
-        <button className="btn btn-rope" style={{width:"100%",padding:12,marginTop:10,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={importAll}><Upload size={16}/>Import</button>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:8,marginTop:10}}>
+          <button className="btn btn-ghost" style={{padding:12,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={()=>backupFileRef.current?.click()}><Upload size={16}/>Import backup file</button>
+          <button className="btn btn-rope" style={{padding:12,display:"flex",justifyContent:"center",gap:6,alignItems:"center"}} onClick={importAll}><Upload size={16}/>Import pasted JSON</button>
+        </div>
         {msg && <div style={{marginTop:10,fontSize:14,color:msg[0]==="✓"?"var(--moss)":"var(--rope)"}}>{msg}</div>}
         {snapshots.length>0 && (
           <div className="card" style={{padding:14,marginTop:16}}>
